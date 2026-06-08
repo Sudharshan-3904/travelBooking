@@ -45,15 +45,25 @@ The project progressively evolves from a simple baseline architecture to a highl
 ## Memory Systems
 
 - ChromaDB
-- Qdrant
-- FAISS
-- PostgreSQL
+- FAISS (CPU)
 
 ## Messaging & Synchronization
 
-- Redis
-- NATS
-- Kafka
+### Phase 0 – Direct Communication
+
+- Python AsyncIO
+- Queue
+- Threading
+- Multiprocessing
+
+### Chapter 3 Experiments
+
+- AsyncIO Event Bus
+- Local Publish-Subscribe Framework
+- Shared State Manager
+- SQLite Event Store
+- File-Based Event Log
+- Custom Message Broker (Research Implementation)
 
 ## Evaluation
 
@@ -191,6 +201,16 @@ Track:
 - Working travel planner
 - Benchmark dataset
 - Baseline metrics dashboard
+
+## Getting Started
+
+Run the Phase 0 baseline system with:
+
+```bash
+python phase0_baseline.py --origin "Seattle" --destination "San Francisco" --departure 2026-09-15 --return 2026-09-19 --travelers 1 --budget "$1500"
+```
+
+If `mlflow` is installed, the run will also log baseline metrics to the default MLflow tracking store.
 
 ---
 
@@ -669,44 +689,7 @@ Every update receives a version identifier.
 
 ---
 
-# Stage 3.6 Conflict Resolution
-
-## Goal
-
-Resolve contradictory decisions.
-
-### Characteristics
-
-Negotiation Agent acts as mediator.
-
-### Evaluation
-
-- Resolution time
-- Agreement quality
-
----
-
-# Stage 3.7 Consensus Protocols
-
-## Goal
-
-Investigate collective decision-making.
-
-### Methods
-
-- Majority Voting
-- Weighted Voting
-- LLM Consensus
-- Reputation-Weighted Consensus
-
-### Evaluation
-
-- Consensus speed
-- Decision quality
-
----
-
-# Stage 3.8 Distributed Memory Synchronization
+# Stage 3.6 Distributed Memory Synchronization
 
 ## Goal
 
@@ -720,42 +703,6 @@ Synchronization strategies:
 
 - Strong Consistency
 - Eventual Consistency
-
----
-
-# Stage 3.9 CRDT-Based Synchronization
-
-## Goal
-
-Enable conflict-free distributed memory.
-
-### Characteristics
-
-Automatic state merging.
-
-### Evaluation
-
-- Merge accuracy
-- Scalability
-
----
-
-# Stage 3.10 Swarm Coordination
-
-## Goal
-
-Investigate emergent collective intelligence.
-
-### Characteristics
-
-No planner agent.
-
-Local interactions produce global behavior.
-
-### Evaluation
-
-- Emergent task completion
-- Network efficiency
 
 ---
 
