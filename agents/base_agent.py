@@ -1,11 +1,134 @@
 import json
 import os
-from typing import List, Optional, Literal
+import re
+from typing import List, Optional, Literal, Tuple
 
 try:
     import ollama
 except ImportError:
     ollama = None
+
+def parse_thinking_and_output(content: str, is_done: bool = False) -> Tuple[str, str]:
+    """
+    Parses the response content into (thinking_content, clean_output_content).
+    Ensures that any internal thoughts/reasoning are stripped away from the clean output.
+    """
+    if not content:
+        return "", ""
+
+    # Normalise common variations of think tags (e.g. with backticks or whitespace)
+    open_match = re.search(r'`*\s*<think>\s*`*', content, re.IGNORECASE)
+    close_match = re.search(r'`*\s*</think>\s*`*', content, re.IGNORECASE)
+    
+    thinking = ""
+    output = content
+    
+    if open_match:
+        start_idx = open_match.start()
+        end_tag_start_idx = open_match.end()
+        
+        if close_match and close_match.start() > start_idx:
+            thinking = content[end_tag_start_idx:close_match.start()]
+            output = content[:start_idx] + content[close_match.end():]
+        else:
+            if is_done:
+                rest = content[end_tag_start_idx:]
+                splitters = [
+                    "Recommendation:", "recommendation:",
+                    "Recommended:", "recommended:",
+                    "Final Recommendation:", "final recommendation:",
+                    "Flight Specialist:", "Hotel Specialist:", "Budget Specialist:", "Negotiation Specialist:",
+                    "Flight Specialist Agent:", "Hotel Specialist Agent:", "Budget Specialist Agent:", "Negotiation Specialist Agent:",
+                    "Based on", "based on",
+                    "Here is", "here is",
+                    "Here are", "here are",
+                    "I recommend", "we recommend",
+                    "Itinerary:", "itinerary:"
+                ]
+                split_found = False
+                for splitter in splitters:
+                    if splitter in rest:
+                        parts = rest.split(splitter, 1)
+                        thinking = parts[0]
+                        output = content[:start_idx] + splitter + parts[1]
+                        split_found = True
+                        break
+                if not split_found:
+                    thinking = rest
+                    output = content[:start_idx]
+            else:
+                thinking = content[end_tag_start_idx:]
+                output = content[:start_idx]
+    else:
+        if is_done:
+            splitters = [
+                "Recommendation:", "recommendation:",
+                "Recommended:", "recommended:",
+                "Final Recommendation:", "final recommendation:",
+                "Flight Specialist:", "Hotel Specialist:", "Budget Specialist:", "Negotiation Specialist:",
+                "Flight Specialist Agent:", "Hotel Specialist Agent:", "Budget Specialist Agent:", "Negotiation Specialist Agent:",
+                "Based on", "based on",
+                "Here is", "here is",
+                "Here are", "here are",
+                "I recommend", "we recommend",
+                "Itinerary:", "itinerary:"
+            ]
+            split_found = False
+            for splitter in splitters:
+                if splitter in content:
+                    parts = content.split(splitter, 1)
+                    thinking = parts[0]
+                    output = splitter + parts[1]
+                    split_found = True
+                    break
+            
+            if not split_found:
+                if "\n\n" in content:
+                    parts = content.split("\n\n", 1)
+                    thinking = parts[0]
+                    output = parts[1]
+                else:
+                    thinking = "Analyzing user parameters and compiling real database results..."
+                    output = content
+
+    thinking = thinking.strip()
+    output = output.strip()
+    
+    # Strip residual tags or backticks at the beginning of the output
+    output = re.sub(r'^`*\s*</think>\s*`*', '', output, flags=re.IGNORECASE).strip()
+    
+    # Filter out any lines in the output that are clearly internal thinking or meta-commentary
+    if output:
+        lines = output.split("\n")
+        cleaned_lines = []
+        thinking_lines = []
+        for line in lines:
+            stripped = line.strip()
+            if (
+                "critical instruction" in stripped.lower() or 
+                "structure your entire response" in stripped.lower() or
+                "start with a" in stripped.lower() or
+                stripped.startswith("*   Role:") or stripped.startswith("* Role:") or
+                stripped.startswith("*   Task:") or stripped.startswith("* Task:") or
+                stripped.startswith("*   Wait") or stripped.startswith("* Wait") or
+                stripped.startswith("*   Let's") or stripped.startswith("* Let's") or
+                stripped.startswith("*   Re-read") or stripped.startswith("* Re-read") or
+                stripped.startswith("*   Checking") or stripped.startswith("* Checking") or
+                stripped.startswith("Wait, the first line says") or
+                stripped.startswith("Let's re-read the input") or
+                stripped.startswith("Contradiction found") or
+                stripped.startswith("Okay, so the real task") or
+                "internal check" in stripped.lower()
+            ):
+                thinking_lines.append(line)
+            else:
+                cleaned_lines.append(line)
+        
+        if thinking_lines:
+            thinking = (thinking + "\n" + "\n".join(thinking_lines)).strip()
+            output = "\n".join(cleaned_lines).strip()
+
+    return thinking, output
 
 class OllamaManager:
     def __init__(self, base_url: str = "http://localhost:11434", model_name: str = "llama3.2:latest"):
@@ -131,22 +254,61 @@ class BaseAgent:
             self.llm_manager.set_model(model_name)
 
     def process_prompt(self, sys_prompt: str = "", user_prompt: str = "") -> str:
-        messages = [{"role": "system", "content": sys_prompt}, {"role": "user", "content": user_prompt}]
+        active_model = getattr(self.llm_manager, "active_model", "") if self.llm_manager else ""
+        if active_model and "0.8b" not in active_model.lower():
+            thought_instruction = (
+                "\n\nCRITICAL INSTRUCTION: You must structure your entire response as follows:\n"
+                "First, start with a `<think>` tag, write your internal thoughts/reasoning process (e.g., analyze the request, match options, calculate costs, verify budgets), and close it with a `</think>` tag.\n"
+                "Second, immediately after the `</think>` tag, provide your final response/recommendation clearly and concisely."
+            )
+            full_sys_prompt = sys_prompt + thought_instruction
+        else:
+            full_sys_prompt = sys_prompt
+
+        messages = [{"role": "system", "content": full_sys_prompt}, {"role": "user", "content": user_prompt}]
+        
+        raw_response = ""
         if self.llm_manager:
             try:
-                return self.llm_manager.response(messages)
+                raw_response = self.llm_manager.response(messages)
             except Exception:
-                return self.fallback_response(sys_prompt, user_prompt)
+                raw_response = self.fallback_response(sys_prompt, user_prompt)
+        else:
+            raw_response = self.fallback_response(sys_prompt, user_prompt)
 
-        return self.fallback_response(sys_prompt, user_prompt)
+        # Parse and clean the response
+        _, clean_response = parse_thinking_and_output(raw_response, is_done=True)
+
+        # Fallback to database-driven simulation if clean response is empty or too short
+        if not clean_response or len(clean_response.strip()) < 30:
+            fallback = self.fallback_response(sys_prompt, user_prompt)
+            _, clean_response = parse_thinking_and_output(fallback, is_done=True)
+
+        return clean_response
 
     def process_prompt_stream(self, sys_prompt: str = "", user_prompt: str = ""):
-        messages = [{"role": "system", "content": sys_prompt}, {"role": "user", "content": user_prompt}]
+        active_model = getattr(self.llm_manager, "active_model", "") if self.llm_manager else ""
+        if active_model and "0.8b" not in active_model.lower():
+            thought_instruction = (
+                "\n\nCRITICAL INSTRUCTION: You must structure your entire response as follows:\n"
+                "First, start with a `<think>` tag, write your internal thoughts/reasoning process (e.g., analyze the request, match options, calculate costs, verify budgets), and close it with a `</think>` tag.\n"
+                "Second, immediately after the `</think>` tag, provide your final response/recommendation clearly and concisely."
+            )
+            full_sys_prompt = sys_prompt + thought_instruction
+        else:
+            full_sys_prompt = sys_prompt
+
+        messages = [{"role": "system", "content": full_sys_prompt}, {"role": "user", "content": user_prompt}]
+        
+        yielded_any = False
         if self.llm_manager:
             try:
                 for chunk in self.llm_manager.response_stream(messages):
-                    yield chunk
-                return
+                    if chunk:
+                        yield chunk
+                        yielded_any = True
+                if yielded_any:
+                    return
             except Exception:
                 pass
 

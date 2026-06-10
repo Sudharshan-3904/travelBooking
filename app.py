@@ -10,6 +10,7 @@ from agents.planner_agent import PlannerAgent, TravelRequest
 from agents.flight_agent import FlightSearchRequest
 from agents.hotel_agent import HotelSearchRequest
 from agents.mlflow_tracker import MLflowTracker
+from agents.base_agent import parse_thinking_and_output
 
 # Page Configuration with premium styling
 st.set_page_config(
@@ -281,23 +282,6 @@ def format_markdown_to_html(text: str) -> str:
         
     return "\n".join(formatted_lines)
 
-# Helper to parse thinking blocks and main output
-def parse_thinking_and_output(content: str):
-    thinking = ""
-    output = content
-    if "<think>" in content:
-        parts = content.split("<think>", 1)
-        before_think = parts[0]
-        rest = parts[1]
-        if "</think>" in rest:
-            think_parts = rest.split("</think>", 1)
-            thinking = think_parts[0]
-            output = before_think + think_parts[1]
-        else:
-            thinking = rest
-            output = before_think
-    return thinking.strip(), output.strip()
-
 # Helper function to render a chat message bubble
 def render_chat_message(agent_name: str, role_class: str, avatar: str, avatar_class: str, bubble_class: str, content: str, is_done: bool = False):
     color_map = {
@@ -310,7 +294,7 @@ def render_chat_message(agent_name: str, role_class: str, avatar: str, avatar_cl
     color = color_map.get(role_class, "#D1D5DB")
     current_time = datetime.now().strftime('%H:%M:%S')
     
-    thinking, main_output = parse_thinking_and_output(content)
+    thinking, main_output = parse_thinking_and_output(content, is_done)
     
     formatted_thinking = format_markdown_to_html(thinking) if thinking else ""
     formatted_main = format_markdown_to_html(main_output) if main_output else ""
@@ -521,222 +505,105 @@ with tab1:
             planner.temperature = temperature
             planner.set_model(selected_model)
             
-            st.markdown("#### 💬 TravelNet Agent Collaboration Room")
+            # 1. FLIGHT SPECIALIST AGENT
+            status_text.text("Flight Specialist Agent is researching...")
+            progress_bar.progress(10)
             
-            # Create a scrolling container for our group chat
-            chat_container = st.container()
-            with chat_container:
-                # 0. PLANNER AGENT INITIAL ANNOUNCEMENT
-                planner_intro_area = st.empty()
-                planner_intro_area.markdown(
-                    render_chat_message(
-                        agent_name="Planner Agent",
-                        role_class="planner",
-                        avatar="🗺️",
-                        avatar_class="planner",
-                        bubble_class="planner",
-                        content=f"Team assembled. Starting planning sequence for a group of {request.travelers} traveler(s) from **{request.origin}** to **{request.destination}**.\nTravel Window: **{request.departure_date}** to **{request.return_date}**.\nBudget: **{request.budget or 'Not specified'}**.\nPreferences: *{request.preferences}*"
-                    ),
-                    unsafe_allow_html=True,
-                    width="auto"
-                )
+            flight_summary = ""
+            flight_search_req = FlightSearchRequest(
+                origin=request.origin,
+                destination=request.destination,
+                departure_date=request.departure_date,
+                return_date=request.return_date,
+                travelers=request.travelers,
+                preferences=request.preferences,
+            )
+            for chunk in planner.flight_agent.search_flights_stream(flight_search_req):
+                flight_summary += chunk
+            
+            # Clean and verify flight summary
+            _, clean_flight = parse_thinking_and_output(flight_summary, is_done=True)
+            if not clean_flight or len(clean_flight.strip()) < 30:
+                clean_flight = planner.flight_agent.search_flights(flight_search_req)
+            
+            # 2. HOTEL SPECIALIST AGENT
+            status_text.text("Hotel Specialist Agent is finding lodging...")
+            progress_bar.progress(35)
+            
+            hotel_summary = ""
+            hotel_search_req = HotelSearchRequest(
+                destination=request.destination,
+                check_in_date=request.departure_date,
+                check_out_date=request.return_date,
+                travelers=request.travelers,
+                preferences=request.preferences,
+            )
+            for chunk in planner.hotel_agent.search_hotels_stream(hotel_search_req):
+                hotel_summary += chunk
                 
-                # 1. FLIGHT SPECIALIST AGENT
-                status_text.text("Flight Specialist Agent is researching...")
-                progress_bar.progress(10)
-                flight_stream_area = st.empty()
+            # Clean and verify hotel summary
+            _, clean_hotel = parse_thinking_and_output(hotel_summary, is_done=True)
+            if not clean_hotel or len(clean_hotel.strip()) < 30:
+                clean_hotel = planner.hotel_agent.search_hotels(hotel_search_req)
                 
-                flight_summary = ""
-                flight_search_req = FlightSearchRequest(
-                    origin=request.origin,
+            # 3. BUDGET SPECIALIST AGENT
+            status_text.text("Budget Specialist Agent is calculating expenses...")
+            progress_bar.progress(60)
+            
+            budget_summary = ""
+            for chunk in planner.budget_agent.analyze_budget_stream(
+                destination=request.destination,
+                departure_date=request.departure_date,
+                return_date=request.return_date,
+                travelers=request.travelers,
+                flight_summary=clean_flight,
+                hotel_summary=clean_hotel,
+                user_budget=request.budget,
+            ):
+                budget_summary += chunk
+                
+            # Clean and verify budget summary
+            _, clean_budget = parse_thinking_and_output(budget_summary, is_done=True)
+            if not clean_budget or len(clean_budget.strip()) < 30:
+                clean_budget = planner.budget_agent.analyze_budget(
                     destination=request.destination,
                     departure_date=request.departure_date,
                     return_date=request.return_date,
                     travelers=request.travelers,
-                    preferences=request.preferences,
-                )
-                
-                # Stream Flight Agent Output
-                for chunk in planner.flight_agent.search_flights_stream(flight_search_req):
-                    flight_summary += chunk
-                    flight_stream_area.markdown(
-                        render_chat_message(
-                            agent_name="Flight Specialist Agent",
-                            role_class="flight",
-                            avatar="✈️",
-                            avatar_class="flight",
-                            bubble_class="flight",
-                            content=flight_summary
-                        ),
-                        unsafe_allow_html=True,
-                        width="auto"
-                    )
-                # Final render for flight specialist (collapsing thinking process)
-                flight_stream_area.markdown(
-                    render_chat_message(
-                        agent_name="Flight Specialist Agent",
-                        role_class="flight",
-                        avatar="✈️",
-                        avatar_class="flight",
-                        bubble_class="flight",
-                        content=flight_summary,
-                        is_done=True
-                    ),
-                    unsafe_allow_html=True,
-                    width="auto"
-                )
-                
-                # 2. HOTEL SPECIALIST AGENT
-                status_text.text("Hotel Specialist Agent is finding lodging...")
-                progress_bar.progress(35)
-                hotel_stream_area = st.empty()
-                
-                hotel_summary = ""
-                hotel_search_req = HotelSearchRequest(
-                    destination=request.destination,
-                    check_in_date=request.departure_date,
-                    check_out_date=request.return_date,
-                    travelers=request.travelers,
-                    preferences=request.preferences,
-                )
-                
-                # Stream Hotel Agent Output
-                for chunk in planner.hotel_agent.search_hotels_stream(hotel_search_req):
-                    hotel_summary += chunk
-                    hotel_stream_area.markdown(
-                        render_chat_message(
-                            agent_name="Hotel Specialist Agent",
-                            role_class="hotel",
-                            avatar="🏨",
-                            avatar_class="hotel",
-                            bubble_class="hotel",
-                            content=hotel_summary
-                        ),
-                        unsafe_allow_html=True,
-                        width="auto"
-                    )
-                # Final render for hotel specialist (collapsing thinking process)
-                hotel_stream_area.markdown(
-                    render_chat_message(
-                        agent_name="Hotel Specialist Agent",
-                        role_class="hotel",
-                        avatar="🏨",
-                        avatar_class="hotel",
-                        bubble_class="hotel",
-                        content=hotel_summary,
-                        is_done=True
-                    ),
-                    unsafe_allow_html=True,
-                    width="auto"
-                )
-                    
-                # 3. BUDGET SPECIALIST AGENT
-                status_text.text("Budget Specialist Agent is calculating expenses...")
-                progress_bar.progress(60)
-                budget_stream_area = st.empty()
-                
-                budget_summary = ""
-                # Stream Budget Agent Output
-                for chunk in planner.budget_agent.analyze_budget_stream(
-                    destination=request.destination,
-                    departure_date=request.departure_date,
-                    return_date=request.return_date,
-                    travelers=request.travelers,
-                    flight_summary=flight_summary,
-                    hotel_summary=hotel_summary,
+                    flight_summary=clean_flight,
+                    hotel_summary=clean_hotel,
                     user_budget=request.budget,
-                ):
-                    budget_summary += chunk
-                    budget_stream_area.markdown(
-                        render_chat_message(
-                            agent_name="Budget Specialist Agent",
-                            role_class="budget",
-                            avatar="💰",
-                            avatar_class="budget",
-                            bubble_class="budget",
-                            content=budget_summary
-                        ),
-                        unsafe_allow_html=True,
-                        width="auto"
-                    )
-                # Final render for budget specialist (collapsing thinking process)
-                budget_stream_area.markdown(
-                    render_chat_message(
-                        agent_name="Budget Specialist Agent",
-                        role_class="budget",
-                        avatar="💰",
-                        avatar_class="budget",
-                        bubble_class="budget",
-                        content=budget_summary,
-                        is_done=True
-                    ),
-                    unsafe_allow_html=True,
-                    width="auto"
-                )
-                    
-                # 4. NEGOTIATION SPECIALIST AGENT
-                status_text.text("Negotiation Specialist Agent is aligning options...")
-                progress_bar.progress(80)
-                negotiation_stream_area = st.empty()
-                
-                negotiation_summary = ""
-                # Stream Negotiation Agent Output
-                for chunk in planner.negotiation_agent.resolve_conflicts_stream(
-                    flight_summary=flight_summary,
-                    hotel_summary=hotel_summary,
-                    budget_summary=budget_summary,
-                ):
-                    negotiation_summary += chunk
-                    negotiation_stream_area.markdown(
-                        render_chat_message(
-                            agent_name="Negotiation Specialist Agent",
-                            role_class="negotiation",
-                            avatar="🤝",
-                            avatar_class="negotiation",
-                            bubble_class="negotiation",
-                            content=negotiation_summary
-                        ),
-                        unsafe_allow_html=True,
-                        width="auto"
-                    )
-                # Final render for negotiation specialist (collapsing thinking process)
-                negotiation_stream_area.markdown(
-                    render_chat_message(
-                        agent_name="Negotiation Specialist Agent",
-                        role_class="negotiation",
-                        avatar="🤝",
-                        avatar_class="negotiation",
-                        bubble_class="negotiation",
-                        content=negotiation_summary,
-                        is_done=True
-                    ),
-                    unsafe_allow_html=True,
-                    width="auto"
                 )
                 
-                # 5. PLANNER AGENT OUTRO
-                planner_outro_area = st.empty()
-                planner_outro_area.markdown(
-                    render_chat_message(
-                        agent_name="Planner Agent",
-                        role_class="planner",
-                        avatar="🗺️",
-                        avatar_class="planner",
-                        bubble_class="planner",
-                        content="Trip plan finalized. Compiling travel itinerary document below..."
-                    ),
-                    unsafe_allow_html=True,
-                    width="auto"
+            # 4. NEGOTIATION SPECIALIST AGENT
+            status_text.text("Negotiation Specialist Agent is aligning options...")
+            progress_bar.progress(80)
+            
+            negotiation_summary = ""
+            for chunk in planner.negotiation_agent.resolve_conflicts_stream(
+                flight_summary=clean_flight,
+                hotel_summary=clean_hotel,
+                budget_summary=clean_budget,
+            ):
+                negotiation_summary += chunk
+            
+            # Clean and verify negotiation summary
+            _, clean_negotiation = parse_thinking_and_output(negotiation_summary, is_done=True)
+            if not clean_negotiation or len(clean_negotiation.strip()) < 30:
+                clean_negotiation = planner.negotiation_agent.resolve_conflicts(
+                    flight_summary=clean_flight,
+                    hotel_summary=clean_hotel,
+                    budget_summary=clean_budget,
                 )
             
-            # Compile final plan
+            # Compile final plan with clean agent summaries
             plan = {
                 "destination": request.destination,
                 "travel_window": f"{request.departure_date} to {request.return_date}",
-                "flight_recommendation": flight_summary,
-                "hotel_recommendation": hotel_summary,
-                "budget_analysis": budget_summary,
-                "negotiation_summary": negotiation_summary,
+                "flight_recommendation": clean_flight,
+                "hotel_recommendation": clean_hotel,
+                "budget_analysis": clean_budget,
+                "negotiation_summary": clean_negotiation,
             }
             
             status_text.text("Building final itinerary...")
@@ -747,9 +614,9 @@ with tab1:
             progress_bar.progress(100)
             status_text.text("Plan generated successfully!")
             
-            # Display final itinerary in a beautiful text area
+            # Display final itinerary
             st.markdown("### 📋 Final Compiled Itinerary")
-            st.code(itinerary, language="markdown")
+            st.code(itinerary, language="markdown", wrap_lines=True)
             
             # Log run metrics and parameters to MLflow
             status_text.text("Logging metrics to MLflow tracker...")
