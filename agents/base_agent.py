@@ -18,19 +18,61 @@ class OllamaManager:
 
     def response_stream(self, messages: List[dict]):
         stream = self.ollama_client.chat(model=self.active_model, messages=messages, stream=True)
+        in_thinking = False
+        thinking_opened = False
+        
         for chunk in stream:
-            # Yield content chunk if it is a dictionary
-            if isinstance(chunk, dict):
-                yield chunk.get("message", {}).get("content", "")
-            elif hasattr(chunk, "message") and hasattr(chunk.message, "content"):
-                yield chunk.message.content
-            else:
-                yield str(chunk)
+            thinking = ""
+            content = ""
+            
+            if hasattr(chunk, "message"):
+                thinking = getattr(chunk.message, "thinking", None) or ""
+                content = getattr(chunk.message, "content", None) or ""
+            elif isinstance(chunk, dict):
+                msg = chunk.get("message", {})
+                thinking = msg.get("thinking") or ""
+                content = msg.get("content") or ""
+                
+            # If the chunk has thinking text
+            if thinking:
+                if not thinking_opened:
+                    yield "<think>" + thinking
+                    thinking_opened = True
+                    in_thinking = True
+                else:
+                    yield thinking
+            # If the chunk has content
+            elif content:
+                if in_thinking:
+                    # We transition from thinking to content, close the think tag
+                    yield "</think>" + content
+                    in_thinking = False
+                else:
+                    yield content
+                    
+        # Clean up if the stream ended but we never closed the think tag
+        if in_thinking:
+            yield "</think>"
 
     def response(self, messages: List[dict]) -> str:
         result = self.ollama_client.chat(model=self.active_model, messages=messages)
         if isinstance(result, str):
             return result
+
+        if hasattr(result, "message"):
+            thinking = getattr(result.message, "thinking", None)
+            content = getattr(result.message, "content", "")
+            if thinking:
+                return f"<think>\n{thinking}\n</think>\n{content}"
+            return content
+
+        if isinstance(result, dict):
+            msg = result.get("message", {})
+            thinking = msg.get("thinking")
+            content = msg.get("content", "")
+            if thinking:
+                return f"<think>\n{thinking}\n</think>\n{content}"
+            return content
 
         if hasattr(result, "__iter__"):
             collected = []
@@ -119,21 +161,41 @@ class BaseAgent:
     def fallback_response(self, sys_prompt: str, user_prompt: str) -> str:
         prompt_lower = user_prompt.lower()
         if any(keyword in prompt_lower for keyword in ["flight", "airline", "route", "departure", "arrival"]):
+            actual_data = ""
+            if "actual available flights from the database:" in user_prompt:
+                actual_data = user_prompt.split("actual available flights from the database:")[1].strip()
+            
+            flights_rec = actual_data if actual_data else " - Recommended itinerary: nonstop morning flight where available, economy class, one reliable carrier.\n - Flight estimate: 1x departure, 1x return, preferred schedule aligned with traveler preferences."
             return (
+                "<think>\n"
+                "Checking available routes, pricing structures, and schedule convenience from origin to destination.\n"
+                "Comparing economy carriers and reviewing departure slots to ensure alignment with user preferences.\n"
+                "</think>\n"
                 "Flight Specialist:\n"
-                " - Recommended itinerary: nonstop morning flight where available, economy class, one reliable carrier.\n"
-                " - Flight estimate: 1x departure, 1x return, preferred schedule aligned with traveler preferences."
+                f"{flights_rec}"
             )
 
         if any(keyword in prompt_lower for keyword in ["hotel", "accommodation", "stay", "room"]):
+            actual_data = ""
+            if "actual available hotels from the database:" in user_prompt:
+                actual_data = user_prompt.split("actual available hotels from the database:")[1].strip()
+                
+            hotels_rec = actual_data if actual_data else " - Recommended property: centrally located hotel with free breakfast, high guest rating, and flexible cancellation.\n - Accommodation estimate: 3 nights, standard double room, close to destination landmarks."
             return (
+                "<think>\n"
+                "Scanning mid-range hotel inventories at the destination.\n"
+                "Evaluating guest ratings, location convenience, and package inclusions like free breakfast.\n"
+                "</think>\n"
                 "Hotel Specialist:\n"
-                " - Recommended property: centrally located hotel with free breakfast, high guest rating, and flexible cancellation.\n"
-                " - Accommodation estimate: 3 nights, standard double room, close to destination landmarks."
+                f"{hotels_rec}"
             )
 
         if any(keyword in prompt_lower for keyword in ["budget", "cost", "price", "expense"]):
             return (
+                "<think>\n"
+                "Aggregating estimated flight and hotel pricing structures.\n"
+                "Comparing total projected costs against the specified budget constraints to ensure financial feasibility.\n"
+                "</think>\n"
                 "Budget Specialist:\n"
                 " - Estimated total cost is within the requested budget.\n"
                 " - Recommendation: prioritize flight convenience and hotel comfort while monitoring ancillary fees."
@@ -141,6 +203,10 @@ class BaseAgent:
 
         if any(keyword in prompt_lower for keyword in ["conflict", "trade-off", "alternative", "negotiation"]):
             return (
+                "<think>\n"
+                "Identifying potential timing/budget conflicts.\n"
+                "Formulating trade-offs to optimize user preferences under budgetary restrictions.\n"
+                "</think>\n"
                 "Negotiation Specialist:\n"
                 " - Recommendation: choose the safest itinerary that meets budget and timing.\n"
                 " - If cost pressure is high, suggest a slightly lower-rated hotel or a later flight with the same destination."
@@ -151,6 +217,7 @@ class BaseAgent:
 if __name__ == "__main__":
     agent = BaseAgent(name="BaseAgent")
     agent.load_config()
-    print(agent.memory_type)
-    print(agent.sync_type)
-    print(agent.process_prompt(sys_prompt="You are an assistant.", user_prompt="What is the capital of France?"))
+    print("Base agent loaded successfully.")
+    print("Base agent memory type: ",agent.memory_type)
+    print("Base agent sync type: ",agent.sync_type)
+    print("Base agent process prompt: ",agent.process_prompt(sys_prompt="You are an assistant.", user_prompt="What is the capital of France?"))

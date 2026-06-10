@@ -116,8 +116,227 @@ st.markdown("""
     div.stButton > button:active {
         transform: translateY(0);
     }
+    
+    /* Group Chat Styling overrides */
+    .chat-container {
+        background: rgba(17, 24, 39, 0.4);
+        border: 1px solid rgba(255, 255, 255, 0.08);
+        border-radius: 16px;
+        padding: 24px;
+        margin-top: 15px;
+        margin-bottom: 25px;
+        box-shadow: inset 0 2px 8px rgba(0, 0, 0, 0.5);
+    }
+    .chat-message-row {
+        display: flex;
+        align-items: flex-start;
+        margin-bottom: 20px;
+        animation: fadeInChat 0.3s ease-out;
+    }
+    @keyframes fadeInChat {
+        from { opacity: 0; transform: translateY(8px); }
+        to { opacity: 1; transform: translateY(0); }
+    }
+    .chat-avatar {
+        width: 44px;
+        height: 44px;
+        border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 1.4rem;
+        margin-right: 15px;
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+        flex-shrink: 0;
+    }
+    .avatar-planner {
+        background: linear-gradient(135deg, #6B7280, #374151);
+        border: 1.5px solid #9CA3AF;
+    }
+    .avatar-flight {
+        background: linear-gradient(135deg, #2563EB, #1D4ED8);
+        border: 1.5px solid #60A5FA;
+    }
+    .avatar-hotel {
+        background: linear-gradient(135deg, #059669, #047857);
+        border: 1.5px solid #34D399;
+    }
+    .avatar-budget {
+        background: linear-gradient(135deg, #D97706, #B45309);
+        border: 1.5px solid #FBBF24;
+    }
+    .avatar-negotiation {
+        background: linear-gradient(135deg, #7C3AED, #6D28D9);
+        border: 1.5px solid #A78BFA;
+    }
+    .chat-bubble {
+        background: rgba(17, 24, 39, 0.65);
+        border: 1px solid rgba(255, 255, 255, 0.06);
+        border-radius: 14px;
+        border-top-left-radius: 2px;
+        padding: 15px 20px;
+        flex-grow: 1;
+        box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2);
+    }
+    .bubble-planner { border-left: 3.5px solid #9CA3AF; }
+    .bubble-flight { border-left: 3.5px solid #60A5FA; }
+    .bubble-hotel { border-left: 3.5px solid #34D399; }
+    .bubble-budget { border-left: 3.5px solid #FBBF24; }
+    .bubble-negotiation { border-left: 3.5px solid #A78BFA; }
+    
+    .chat-meta {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        margin-bottom: 6px;
+    }
+    .chat-agent-name {
+        font-weight: 700;
+        font-size: 1.0rem;
+        font-family: 'Space Grotesk', sans-serif;
+    }
+    .chat-agent-role {
+        font-size: 0.7rem;
+        text-transform: uppercase;
+        letter-spacing: 0.06em;
+        padding: 2px 8px;
+        border-radius: 6px;
+        font-weight: 700;
+    }
+    .role-planner { background: rgba(156, 163, 175, 0.12); color: #D1D5DB; }
+    .role-flight { background: rgba(59, 130, 246, 0.12); color: #60A5FA; }
+    .role-hotel { background: rgba(16, 185, 129, 0.12); color: #34D399; }
+    .role-budget { background: rgba(245, 158, 11, 0.12); color: #FBBF24; }
+    .role-negotiation { background: rgba(139, 92, 246, 0.12); color: #A78BFA; }
+    
+    .chat-time {
+        font-size: 0.75rem;
+        color: #6B7280;
+    }
+    .chat-text {
+        font-size: 0.95rem;
+        line-height: 1.6;
+        color: #E5E7EB;
+        white-space: pre-wrap;
+    }
+    
+    /* Thinking Container Styling */
+    .chat-thinking-container {
+        background: rgba(255, 255, 255, 0.03);
+        border: 1px dashed rgba(255, 255, 255, 0.15);
+        border-radius: 8px;
+        padding: 12px 16px;
+        margin-bottom: 12px;
+        font-size: 0.85rem;
+    }
+    .chat-thinking-summary {
+        color: #9CA3AF;
+        font-weight: 600;
+        cursor: pointer;
+        outline: none;
+        user-select: none;
+    }
+    .chat-thinking-text {
+        color: #9CA3AF;
+        margin-top: 8px;
+        white-space: pre-wrap;
+        font-style: italic;
+    }
     </style>
 """, unsafe_allow_html=True)
+
+# Helper to convert basic markdown elements to HTML
+def format_markdown_to_html(text: str) -> str:
+    import re
+    # Escape standard HTML tags except think tags
+    html = text.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+    html = html.replace("&lt;think&gt;", "<think>").replace("&lt;/think&gt;", "</think>")
+    
+    # Bold: **text** -> <strong>text</strong>
+    html = re.sub(r'\*\*(.*?)\*\*', r'<strong>\1</strong>', html)
+    # Italics: *text* -> <em>text</em>
+    html = re.sub(r'\*(.*?)\*', r'<em>\1</em>', html)
+    # Inline code: `code` -> <code>code</code>
+    html = re.sub(r'`(.*?)`', r'<code>\1</code>', html)
+    
+    # Convert lists
+    lines = html.split("\n")
+    formatted_lines = []
+    in_list = False
+    for line in lines:
+        stripped = line.strip()
+        if stripped.startswith("- ") or stripped.startswith("* "):
+            content = stripped[2:]
+            if not in_list:
+                formatted_lines.append("<ul>")
+                in_list = True
+            formatted_lines.append(f"<li>{content}</li>")
+        else:
+            if in_list:
+                formatted_lines.append("</ul>")
+                in_list = False
+            formatted_lines.append(line)
+    if in_list:
+        formatted_lines.append("</ul>")
+        
+    return "\n".join(formatted_lines)
+
+# Helper to parse thinking blocks and main output
+def parse_thinking_and_output(content: str):
+    thinking = ""
+    output = content
+    if "<think>" in content:
+        parts = content.split("<think>", 1)
+        before_think = parts[0]
+        rest = parts[1]
+        if "</think>" in rest:
+            think_parts = rest.split("</think>", 1)
+            thinking = think_parts[0]
+            output = before_think + think_parts[1]
+        else:
+            thinking = rest
+            output = before_think
+    return thinking.strip(), output.strip()
+
+# Helper function to render a chat message bubble
+def render_chat_message(agent_name: str, role_class: str, avatar: str, avatar_class: str, bubble_class: str, content: str, is_done: bool = False):
+    color_map = {
+        "flight": "#60A5FA",
+        "hotel": "#34D399",
+        "budget": "#FBBF24",
+        "negotiation": "#A78BFA",
+        "planner": "#9CA3AF"
+    }
+    color = color_map.get(role_class, "#D1D5DB")
+    current_time = datetime.now().strftime('%H:%M:%S')
+    
+    thinking, main_output = parse_thinking_and_output(content)
+    
+    formatted_thinking = format_markdown_to_html(thinking) if thinking else ""
+    formatted_main = format_markdown_to_html(main_output) if main_output else ""
+    
+    thinking_html = ""
+    if thinking:
+        # Collapse the thinking details if the block is fully finished (indicated by </think> or is_done)
+        is_thinking_finished = is_done or ("</think>" in content)
+        open_attr = "" if is_thinking_finished else " open"
+        thinking_html = f"""<details class="chat-thinking-container"{open_attr}>
+<summary class="chat-thinking-summary">🧠 Thinking process...</summary>
+<div class="chat-thinking-text">{formatted_thinking}</div>
+</details>"""
+        
+    return f"""<div class="chat-message-row">
+<div class="chat-avatar avatar-{avatar_class}">{avatar}</div>
+<div class="chat-bubble bubble-{bubble_class}">
+<div class="chat-meta">
+<span class="chat-agent-name" style="color: {color};">{agent_name}</span>
+<span class="chat-agent-role role-{role_class}">{role_class.upper()}</span>
+<span class="chat-time">{current_time}</span>
+</div>
+{thinking_html}
+<div class="chat-text">{formatted_main}</div>
+</div>
+</div>"""
 
 # Helper function to check if port is open
 def is_port_open(port):
@@ -155,14 +374,26 @@ def get_ollama_models():
     try:
         import ollama
         client = ollama.Client()
-        models_data = client.list().get("models", [])
-        model_names = [m["name"] for m in models_data if "embed" not in m["name"].lower()]
+        models_data = client.list()
+        model_names = []
+        if models_data and hasattr(models_data, "models"):
+            for m in models_data.models:
+                # Retrieve the model name using attribute or dictionary dump
+                model_name = getattr(m, "model", None) or getattr(m, "name", None)
+                if not model_name:
+                    if hasattr(m, "model_dump"):
+                        model_name = m.model_dump().get("model") or m.model_dump().get("name")
+                    elif hasattr(m, "dict"):
+                        model_name = m.dict().get("model") or m.dict().get("name")
+                if model_name and "embed" not in model_name.lower():
+                    model_names.append(model_name)
         if not model_names:
-            return ["llama3.2:latest", "qwen3.5:4b", "gemma4:e2b"]
+            return None
         return model_names
-    except Exception:
+    except Exception as e:
+        print(e)
         # Return sensible defaults if ollama client is not running/installed
-        return ["llama3.2:latest", "qwen3.5:4b", "gemma4:e2b"]
+        return None
 
 # Title header with premium aesthetic
 st.markdown("""
@@ -193,7 +424,7 @@ with st.sidebar:
     st.markdown("### ⚙️ Agent Configuration")
     
     # Model Selection
-    available_models = get_ollama_models()
+    available_models = get_ollama_models() or ["llama3.2:latest", "qwen3.5:4b", "gemma4:e2b"]
     selected_model = st.selectbox("Select LLM Model", options=available_models, index=0)
     
     # Memory and Sync Configurations
@@ -290,109 +521,214 @@ with tab1:
             planner.temperature = temperature
             planner.set_model(selected_model)
             
-            st.markdown("#### 🔄 Agent Workflow Execution")
+            st.markdown("#### 💬 TravelNet Agent Collaboration Room")
             
-            # 1. FLIGHT SPECIALIST AGENT
-            status_text.text("Invoking Flight Specialist Agent...")
-            progress_bar.progress(10)
-            
-            flight_container = st.container()
-            with flight_container:
-                st.markdown(
-                    "<div class='agent-header'><span class='agent-title'>✈️ Flight Specialist Agent</span><span class='agent-badge'>Active</span></div>", 
-                    unsafe_allow_html=True
+            # Create a scrolling container for our group chat
+            chat_container = st.container()
+            with chat_container:
+                # 0. PLANNER AGENT INITIAL ANNOUNCEMENT
+                planner_intro_area = st.empty()
+                planner_intro_area.markdown(
+                    render_chat_message(
+                        agent_name="Planner Agent",
+                        role_class="planner",
+                        avatar="🗺️",
+                        avatar_class="planner",
+                        bubble_class="planner",
+                        content=f"Team assembled. Starting planning sequence for a group of {request.travelers} traveler(s) from **{request.origin}** to **{request.destination}**.\nTravel Window: **{request.departure_date}** to **{request.return_date}**.\nBudget: **{request.budget or 'Not specified'}**.\nPreferences: *{request.preferences}*"
+                    ),
+                    unsafe_allow_html=True,
+                    width="auto"
                 )
+                
+                # 1. FLIGHT SPECIALIST AGENT
+                status_text.text("Flight Specialist Agent is researching...")
+                progress_bar.progress(10)
                 flight_stream_area = st.empty()
                 
-            flight_summary = ""
-            flight_search_req = FlightSearchRequest(
-                origin=request.origin,
-                destination=request.destination,
-                departure_date=request.departure_date,
-                return_date=request.return_date,
-                travelers=request.travelers,
-                preferences=request.preferences,
-            )
-            
-            # Stream Flight Agent Output
-            for chunk in planner.flight_agent.search_flights_stream(flight_search_req):
-                flight_summary += chunk
-                flight_stream_area.markdown(f"<div class='agent-content'>{flight_summary}</div>", unsafe_allow_html=True)
-            
-            # 2. HOTEL SPECIALIST AGENT
-            status_text.text("Invoking Hotel Specialist Agent...")
-            progress_bar.progress(35)
-            
-            hotel_container = st.container()
-            with hotel_container:
-                st.markdown(
-                    "<div class='agent-header'><span class='agent-title'>🏨 Hotel Specialist Agent</span><span class='agent-badge'>Active</span></div>", 
-                    unsafe_allow_html=True
+                flight_summary = ""
+                flight_search_req = FlightSearchRequest(
+                    origin=request.origin,
+                    destination=request.destination,
+                    departure_date=request.departure_date,
+                    return_date=request.return_date,
+                    travelers=request.travelers,
+                    preferences=request.preferences,
                 )
+                
+                # Stream Flight Agent Output
+                for chunk in planner.flight_agent.search_flights_stream(flight_search_req):
+                    flight_summary += chunk
+                    flight_stream_area.markdown(
+                        render_chat_message(
+                            agent_name="Flight Specialist Agent",
+                            role_class="flight",
+                            avatar="✈️",
+                            avatar_class="flight",
+                            bubble_class="flight",
+                            content=flight_summary
+                        ),
+                        unsafe_allow_html=True,
+                        width="auto"
+                    )
+                # Final render for flight specialist (collapsing thinking process)
+                flight_stream_area.markdown(
+                    render_chat_message(
+                        agent_name="Flight Specialist Agent",
+                        role_class="flight",
+                        avatar="✈️",
+                        avatar_class="flight",
+                        bubble_class="flight",
+                        content=flight_summary,
+                        is_done=True
+                    ),
+                    unsafe_allow_html=True,
+                    width="auto"
+                )
+                
+                # 2. HOTEL SPECIALIST AGENT
+                status_text.text("Hotel Specialist Agent is finding lodging...")
+                progress_bar.progress(35)
                 hotel_stream_area = st.empty()
                 
-            hotel_summary = ""
-            hotel_search_req = HotelSearchRequest(
-                destination=request.destination,
-                check_in_date=request.departure_date,
-                check_out_date=request.return_date,
-                travelers=request.travelers,
-                preferences=request.preferences,
-            )
-            
-            # Stream Hotel Agent Output
-            for chunk in planner.hotel_agent.search_hotels_stream(hotel_search_req):
-                hotel_summary += chunk
-                hotel_stream_area.markdown(f"<div class='agent-content'>{hotel_summary}</div>", unsafe_allow_html=True)
-                
-            # 3. BUDGET SPECIALIST AGENT
-            status_text.text("Invoking Budget Specialist Agent...")
-            progress_bar.progress(60)
-            
-            budget_container = st.container()
-            with budget_container:
-                st.markdown(
-                    "<div class='agent-header'><span class='agent-title'>💰 Budget Specialist Agent</span><span class='agent-badge'>Active</span></div>", 
-                    unsafe_allow_html=True
+                hotel_summary = ""
+                hotel_search_req = HotelSearchRequest(
+                    destination=request.destination,
+                    check_in_date=request.departure_date,
+                    check_out_date=request.return_date,
+                    travelers=request.travelers,
+                    preferences=request.preferences,
                 )
+                
+                # Stream Hotel Agent Output
+                for chunk in planner.hotel_agent.search_hotels_stream(hotel_search_req):
+                    hotel_summary += chunk
+                    hotel_stream_area.markdown(
+                        render_chat_message(
+                            agent_name="Hotel Specialist Agent",
+                            role_class="hotel",
+                            avatar="🏨",
+                            avatar_class="hotel",
+                            bubble_class="hotel",
+                            content=hotel_summary
+                        ),
+                        unsafe_allow_html=True,
+                        width="auto"
+                    )
+                # Final render for hotel specialist (collapsing thinking process)
+                hotel_stream_area.markdown(
+                    render_chat_message(
+                        agent_name="Hotel Specialist Agent",
+                        role_class="hotel",
+                        avatar="🏨",
+                        avatar_class="hotel",
+                        bubble_class="hotel",
+                        content=hotel_summary,
+                        is_done=True
+                    ),
+                    unsafe_allow_html=True,
+                    width="auto"
+                )
+                    
+                # 3. BUDGET SPECIALIST AGENT
+                status_text.text("Budget Specialist Agent is calculating expenses...")
+                progress_bar.progress(60)
                 budget_stream_area = st.empty()
                 
-            budget_summary = ""
-            # Stream Budget Agent Output
-            for chunk in planner.budget_agent.analyze_budget_stream(
-                destination=request.destination,
-                departure_date=request.departure_date,
-                return_date=request.return_date,
-                travelers=request.travelers,
-                flight_summary=flight_summary,
-                hotel_summary=hotel_summary,
-                user_budget=request.budget,
-            ):
-                budget_summary += chunk
-                budget_stream_area.markdown(f"<div class='agent-content'>{budget_summary}</div>", unsafe_allow_html=True)
-                
-            # 4. NEGOTIATION SPECIALIST AGENT
-            status_text.text("Invoking Negotiation Specialist Agent...")
-            progress_bar.progress(80)
-            
-            neg_container = st.container()
-            with neg_container:
-                st.markdown(
-                    "<div class='agent-header'><span class='agent-title'>🤝 Negotiation Specialist Agent</span><span class='agent-badge'>Active</span></div>", 
-                    unsafe_allow_html=True
+                budget_summary = ""
+                # Stream Budget Agent Output
+                for chunk in planner.budget_agent.analyze_budget_stream(
+                    destination=request.destination,
+                    departure_date=request.departure_date,
+                    return_date=request.return_date,
+                    travelers=request.travelers,
+                    flight_summary=flight_summary,
+                    hotel_summary=hotel_summary,
+                    user_budget=request.budget,
+                ):
+                    budget_summary += chunk
+                    budget_stream_area.markdown(
+                        render_chat_message(
+                            agent_name="Budget Specialist Agent",
+                            role_class="budget",
+                            avatar="💰",
+                            avatar_class="budget",
+                            bubble_class="budget",
+                            content=budget_summary
+                        ),
+                        unsafe_allow_html=True,
+                        width="auto"
+                    )
+                # Final render for budget specialist (collapsing thinking process)
+                budget_stream_area.markdown(
+                    render_chat_message(
+                        agent_name="Budget Specialist Agent",
+                        role_class="budget",
+                        avatar="💰",
+                        avatar_class="budget",
+                        bubble_class="budget",
+                        content=budget_summary,
+                        is_done=True
+                    ),
+                    unsafe_allow_html=True,
+                    width="auto"
                 )
-                neg_stream_area = st.empty()
+                    
+                # 4. NEGOTIATION SPECIALIST AGENT
+                status_text.text("Negotiation Specialist Agent is aligning options...")
+                progress_bar.progress(80)
+                negotiation_stream_area = st.empty()
                 
-            negotiation_summary = ""
-            # Stream Negotiation Agent Output
-            for chunk in planner.negotiation_agent.resolve_conflicts_stream(
-                flight_summary=flight_summary,
-                hotel_summary=hotel_summary,
-                budget_summary=budget_summary,
-            ):
-                negotiation_summary += chunk
-                neg_stream_area.markdown(f"<div class='agent-content'>{negotiation_summary}</div>", unsafe_allow_html=True)
+                negotiation_summary = ""
+                # Stream Negotiation Agent Output
+                for chunk in planner.negotiation_agent.resolve_conflicts_stream(
+                    flight_summary=flight_summary,
+                    hotel_summary=hotel_summary,
+                    budget_summary=budget_summary,
+                ):
+                    negotiation_summary += chunk
+                    negotiation_stream_area.markdown(
+                        render_chat_message(
+                            agent_name="Negotiation Specialist Agent",
+                            role_class="negotiation",
+                            avatar="🤝",
+                            avatar_class="negotiation",
+                            bubble_class="negotiation",
+                            content=negotiation_summary
+                        ),
+                        unsafe_allow_html=True,
+                        width="auto"
+                    )
+                # Final render for negotiation specialist (collapsing thinking process)
+                negotiation_stream_area.markdown(
+                    render_chat_message(
+                        agent_name="Negotiation Specialist Agent",
+                        role_class="negotiation",
+                        avatar="🤝",
+                        avatar_class="negotiation",
+                        bubble_class="negotiation",
+                        content=negotiation_summary,
+                        is_done=True
+                    ),
+                    unsafe_allow_html=True,
+                    width="auto"
+                )
                 
+                # 5. PLANNER AGENT OUTRO
+                planner_outro_area = st.empty()
+                planner_outro_area.markdown(
+                    render_chat_message(
+                        agent_name="Planner Agent",
+                        role_class="planner",
+                        avatar="🗺️",
+                        avatar_class="planner",
+                        bubble_class="planner",
+                        content="Trip plan finalized. Compiling travel itinerary document below..."
+                    ),
+                    unsafe_allow_html=True,
+                    width="auto"
+                )
+            
             # Compile final plan
             plan = {
                 "destination": request.destination,
@@ -454,4 +790,4 @@ with tab2:
     with col_btn:
         st.markdown("[🔗 Open MLflow in New Tab](http://127.0.0.1:5000)", unsafe_allow_html=True)
         
-    st.components.v1.iframe(src="http://127.0.0.1:5000", height=800, scrolling=True)
+    st.iframe(src="http://127.0.0.1:5000", height=800)
