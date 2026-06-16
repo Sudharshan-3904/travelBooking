@@ -139,8 +139,8 @@ class OllamaManager:
     def set_model(self, model_name: str) -> None:
         self.active_model = model_name
 
-    def response_stream(self, messages: List[dict]):
-        stream = self.ollama_client.chat(model=self.active_model, messages=messages, stream=True)
+    def response_stream(self, messages: List[dict], temperature: float = 0.4):
+        stream = self.ollama_client.chat(model=self.active_model, messages=messages, stream=True, options={"temperature": temperature})
         in_thinking = False
         thinking_opened = False
         
@@ -177,8 +177,8 @@ class OllamaManager:
         if in_thinking:
             yield "</think>"
 
-    def response(self, messages: List[dict]) -> str:
-        result = self.ollama_client.chat(model=self.active_model, messages=messages)
+    def response(self, messages: List[dict], temperature: float = 0.4) -> str:
+        result = self.ollama_client.chat(model=self.active_model, messages=messages, options={"temperature": temperature})
         if isinstance(result, str):
             return result
 
@@ -239,15 +239,21 @@ class BaseAgent:
         self.temperature = temperature
         self.memory: List[str] = []
         self.llm_manager = OllamaManager() if ollama else None
+        self.load_config()
 
     def load_config(self, config_filename: str = "config.json") -> None:
         config_filepath = os.path.join(os.path.dirname(__file__), os.path.basename(config_filename))
         if os.path.exists(config_filepath):
-            with open(config_filepath, "r", encoding="utf-8") as config_file:
-                config = json.load(config_file)
-            self.memory_type = config.get("memory_type", self.memory_type)
-            self.sync_type = config.get("sync_type", self.sync_type)
-            self.temperature = config.get("temperature", self.temperature)
+            try:
+                with open(config_filepath, "r", encoding="utf-8") as config_file:
+                    config = json.load(config_file)
+                self.memory_type = config.get("memory_type", self.memory_type)
+                self.sync_type = config.get("sync_type", self.sync_type)
+                self.temperature = config.get("temperature", self.temperature)
+                if "model_name" in config:
+                    self.set_model(config["model_name"])
+            except Exception as e:
+                print(f"Error loading config: {e}")
 
     def set_model(self, model_name: str) -> None:
         if self.llm_manager:
@@ -270,7 +276,7 @@ class BaseAgent:
         raw_response = ""
         if self.llm_manager:
             try:
-                raw_response = self.llm_manager.response(messages)
+                raw_response = self.llm_manager.response(messages, temperature=self.temperature)
             except Exception:
                 raw_response = self.fallback_response(sys_prompt, user_prompt)
         else:
@@ -303,7 +309,7 @@ class BaseAgent:
         yielded_any = False
         if self.llm_manager:
             try:
-                for chunk in self.llm_manager.response_stream(messages):
+                for chunk in self.llm_manager.response_stream(messages, temperature=self.temperature):
                     if chunk:
                         yield chunk
                         yielded_any = True

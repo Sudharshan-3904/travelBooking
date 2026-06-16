@@ -1,5 +1,6 @@
 {
     "memory_type": "no_memory",
     "sync_type": "direct_message",
-    "temperature": 0.4
+    "temperature": 0.2,
+    "model_name": "qwen2.5:1.5b"
 }

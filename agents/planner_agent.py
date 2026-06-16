@@ -25,12 +25,75 @@ class PlannerAgent(BaseAgent):
         self.budget_agent = BudgetAgent(memory_type=memory_type, sync_type=sync_type)
         self.negotiation_agent = NegotiationAgent(memory_type=memory_type, sync_type=sync_type)
 
+    def load_config(self, config_filename: str = "config.json") -> None:
+        super().load_config(config_filename)
+        if hasattr(self, 'flight_agent'):
+            self.flight_agent.load_config(config_filename)
+        if hasattr(self, 'hotel_agent'):
+            self.hotel_agent.load_config(config_filename)
+        if hasattr(self, 'budget_agent'):
+            self.budget_agent.load_config(config_filename)
+        if hasattr(self, 'negotiation_agent'):
+            self.negotiation_agent.load_config(config_filename)
+
     def set_model(self, model_name: str) -> None:
         super().set_model(model_name)
-        self.flight_agent.set_model(model_name)
-        self.hotel_agent.set_model(model_name)
-        self.budget_agent.set_model(model_name)
-        self.negotiation_agent.set_model(model_name)
+        if hasattr(self, 'flight_agent'):
+            self.flight_agent.set_model(model_name)
+        if hasattr(self, 'hotel_agent'):
+            self.hotel_agent.set_model(model_name)
+        if hasattr(self, 'budget_agent'):
+            self.budget_agent.set_model(model_name)
+        if hasattr(self, 'negotiation_agent'):
+            self.negotiation_agent.set_model(model_name)
+
+    @property
+    def temperature(self) -> float:
+        return self._temperature
+
+    @temperature.setter
+    def temperature(self, value: float) -> None:
+        self._temperature = value
+        if hasattr(self, 'flight_agent'):
+            self.flight_agent.temperature = value
+        if hasattr(self, 'hotel_agent'):
+            self.hotel_agent.temperature = value
+        if hasattr(self, 'budget_agent'):
+            self.budget_agent.temperature = value
+        if hasattr(self, 'negotiation_agent'):
+            self.negotiation_agent.temperature = value
+
+    @property
+    def memory_type(self) -> str:
+        return self._memory_type
+
+    @memory_type.setter
+    def memory_type(self, value: str) -> None:
+        self._memory_type = value
+        if hasattr(self, 'flight_agent'):
+            self.flight_agent.memory_type = value
+        if hasattr(self, 'hotel_agent'):
+            self.hotel_agent.memory_type = value
+        if hasattr(self, 'budget_agent'):
+            self.budget_agent.memory_type = value
+        if hasattr(self, 'negotiation_agent'):
+            self.negotiation_agent.memory_type = value
+
+    @property
+    def sync_type(self) -> str:
+        return self._sync_type
+
+    @sync_type.setter
+    def sync_type(self, value: str) -> None:
+        self._sync_type = value
+        if hasattr(self, 'flight_agent'):
+            self.flight_agent.sync_type = value
+        if hasattr(self, 'hotel_agent'):
+            self.hotel_agent.sync_type = value
+        if hasattr(self, 'budget_agent'):
+            self.budget_agent.sync_type = value
+        if hasattr(self, 'negotiation_agent'):
+            self.negotiation_agent.sync_type = value
 
     def plan_trip(self, request: TravelRequest) -> Dict[str, str]:
         flight_request = FlightSearchRequest(
