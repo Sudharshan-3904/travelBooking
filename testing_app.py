@@ -485,18 +485,35 @@ Response JSON:
         raw_res = eval_agent.process_prompt(sys_prompt, user_prompt)
         json_match = re.search(r'\{.*\}', raw_res, re.DOTALL)
         if json_match:
-            data = json.loads(json_match.group(0))
-            required_keys = ["destination_pass", "origin_pass", "budget_pass", "duration_pass", "constraints_pass", "overall_score", "reasoning"]
-            if all(k in data for k in required_keys):
-                return {
-                    "destination_pass": bool(data["destination_pass"]),
-                    "origin_pass": bool(data["origin_pass"]),
-                    "duration_pass": bool(data["duration_pass"]),
-                    "budget_pass": bool(data["budget_pass"]),
-                    "constraints_pass": bool(data["constraints_pass"]),
-                    "overall_score": int(data["overall_score"]),
-                    "reasoning": f"LLM Audit: {data['reasoning']}"
-                }
+            json_text = json_match.group(0)
+            # Strip comments (single-line and multi-line)
+            comment_pattern = r'("(?:\\.|[^"\\])*")|//.*|/\*(?:[^*]|\*(?!/))*\*/'
+            cleaned_text = re.sub(comment_pattern, lambda m: m.group(1) if m.group(1) is not None else "", json_text)
+            
+            # Try parsing with standard json
+            data = None
+            try:
+                data = json.loads(cleaned_text)
+            except Exception:
+                # Fallback to python literal evaluation for lenient parsing
+                try:
+                    py_str = cleaned_text.replace("true", "True").replace("false", "False").replace("null", "None")
+                    data = ast.literal_eval(py_str)
+                except Exception:
+                    pass
+            
+            if data and isinstance(data, dict):
+                required_keys = ["destination_pass", "origin_pass", "budget_pass", "duration_pass", "constraints_pass", "overall_score", "reasoning"]
+                if all(k in data for k in required_keys):
+                    return {
+                        "destination_pass": bool(data["destination_pass"]),
+                        "origin_pass": bool(data["origin_pass"]),
+                        "duration_pass": bool(data["duration_pass"]),
+                        "budget_pass": bool(data["budget_pass"]),
+                        "constraints_pass": bool(data["constraints_pass"]),
+                        "overall_score": int(data["overall_score"]),
+                        "reasoning": f"LLM Audit: {data['reasoning']}"
+                    }
     except Exception as e:
         print(f"LLM evaluation failed: {e}")
     
