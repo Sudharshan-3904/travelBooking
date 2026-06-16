@@ -239,6 +239,8 @@ class BaseAgent:
         self.temperature = temperature
         self.memory: List[str] = []
         self.llm_manager = OllamaManager() if ollama else None
+        from agents.memory_manager import MemoryManager
+        self.memory_manager = MemoryManager()
         self.load_config()
 
     def load_config(self, config_filename: str = "config.json") -> None:
@@ -271,7 +273,25 @@ class BaseAgent:
         else:
             full_sys_prompt = sys_prompt
 
-        messages = [{"role": "system", "content": full_sys_prompt}, {"role": "user", "content": user_prompt}]
+        memory_context = ""
+        if hasattr(self, "memory_manager") and self.memory_type != "no_memory":
+            memory_context = self.memory_manager.retrieve_context(
+                agent_name=self.name,
+                query=user_prompt,
+                memory_type=self.memory_type
+            )
+
+        if memory_context:
+            augmented_user_prompt = (
+                f"BACKGROUND MEMORY CONTEXT ({self.memory_type.upper()}):\n"
+                f"{memory_context}\n"
+                f"-----------------------------------------\n\n"
+                f"{user_prompt}"
+            )
+        else:
+            augmented_user_prompt = user_prompt
+
+        messages = [{"role": "system", "content": full_sys_prompt}, {"role": "user", "content": augmented_user_prompt}]
         
         raw_response = ""
         if self.llm_manager:
@@ -290,6 +310,14 @@ class BaseAgent:
             fallback = self.fallback_response(sys_prompt, user_prompt)
             _, clean_response = parse_thinking_and_output(fallback, is_done=True)
 
+        if hasattr(self, "memory_manager") and self.memory_type != "no_memory" and clean_response:
+            self.memory_manager.add_interaction(
+                agent_name=self.name,
+                query=user_prompt,
+                input_text=augmented_user_prompt,
+                output_text=clean_response
+            )
+
         return clean_response
 
     def process_prompt_stream(self, sys_prompt: str = "", user_prompt: str = ""):
@@ -304,22 +332,58 @@ class BaseAgent:
         else:
             full_sys_prompt = sys_prompt
 
-        messages = [{"role": "system", "content": full_sys_prompt}, {"role": "user", "content": user_prompt}]
+        memory_context = ""
+        if hasattr(self, "memory_manager") and self.memory_type != "no_memory":
+            memory_context = self.memory_manager.retrieve_context(
+                agent_name=self.name,
+                query=user_prompt,
+                memory_type=self.memory_type
+            )
+
+        if memory_context:
+            augmented_user_prompt = (
+                f"BACKGROUND MEMORY CONTEXT ({self.memory_type.upper()}):\n"
+                f"{memory_context}\n"
+                f"-----------------------------------------\n\n"
+                f"{user_prompt}"
+            )
+        else:
+            augmented_user_prompt = user_prompt
+
+        messages = [{"role": "system", "content": full_sys_prompt}, {"role": "user", "content": augmented_user_prompt}]
         
+        accumulated_response = ""
         yielded_any = False
         if self.llm_manager:
             try:
                 for chunk in self.llm_manager.response_stream(messages, temperature=self.temperature):
                     if chunk:
                         yield chunk
+                        accumulated_response += chunk
                         yielded_any = True
                 if yielded_any:
+                    _, clean_res = parse_thinking_and_output(accumulated_response, is_done=True)
+                    if hasattr(self, "memory_manager") and self.memory_type != "no_memory" and clean_res:
+                        self.memory_manager.add_interaction(
+                            agent_name=self.name,
+                            query=user_prompt,
+                            input_text=augmented_user_prompt,
+                            output_text=clean_res
+                        )
                     return
             except Exception:
                 pass
 
         # Fallback response streaming simulation
         fallback = self.fallback_response(sys_prompt, user_prompt)
+        _, clean_res = parse_thinking_and_output(fallback, is_done=True)
+        if hasattr(self, "memory_manager") and self.memory_type != "no_memory" and clean_res:
+            self.memory_manager.add_interaction(
+                agent_name=self.name,
+                query=user_prompt,
+                input_text=augmented_user_prompt,
+                output_text=clean_res
+            )
         import time
         words = fallback.split(" ")
         for i, word in enumerate(words):

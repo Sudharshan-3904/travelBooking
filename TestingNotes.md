@@ -1,8 +1,6 @@
 # Multi Agent Mesh Research
 
-## Baseline system notes
-
-### Config
+## Testing Config
 
 | Criteria          | Value          |
 | ----------------- | -------------- |
@@ -13,7 +11,11 @@
 | Sync Protocol     | Direct Message |
 | Temperature       | 0.2            |
 
-### Scores
+## Baseline system notes - Phase 0
+
+## Quantitative Scores
 
 - Avg Score: 92.3%
 - Budget Pass Rate: 60%
+
+## Qualitative Notes

@@ -396,7 +396,7 @@ with st.sidebar:
         "Select Active Build Phase",
         options=[
             "Phase 0: Baseline System (Direct Flow)",
-            "Phase 1: Memory Systems (Locked)",
+            "Phase 1: Memory Systems",
             "Phase 2: Adaptive Routing (Locked)",
             "Phase 3: Event Synchronization (Locked)"
         ],
@@ -469,14 +469,91 @@ with st.sidebar:
 tab1, tab2 = st.tabs(["✈️ Trip Planner Dashboard", "📊 MLflow Experiment Tracking"])
 
 with tab1:
-    st.markdown("### 🚀 Phase 0: Baseline Planner")
-    st.markdown("""
-        In Phase 0, travel recommendations are constructed sequentially through a fixed flow of four specialized agents:
-        **Flight Agent** ➔ **Hotel Agent** ➔ **Budget Agent** ➔ **Negotiation Agent**.
-    """)
-    
+    if "Phase 0" in phase_selection:
+        st.markdown("### 🚀 Phase 0: Baseline Planner")
+        st.markdown("""
+            In Phase 0, travel recommendations are constructed sequentially through a fixed flow of four specialized agents:
+            **Flight Agent** ➔ **Hotel Agent** ➔ **Budget Agent** ➔ **Negotiation Agent**.
+        """)
+        active_memory = "no_memory"
+    else:
+        st.markdown("### 🧠 Phase 1: Memory-Enabled Planner")
+        st.markdown(f"""
+            In Phase 1, agents are augmented with a persistent memory layer (**{memory_type.upper()}**).
+            They retrieve historical interactions, user profiles, and solved episodes before executing requests, then commit new findings back to the memory mesh.
+        """)
+        
+        # Display memory characteristics card
+        memory_descriptions = {
+            "no_memory": "Stateless execution. No historical context is retrieved or retained.",
+            "conversation_memory": "Retains recent conversational interactions (last 3 runs) to ensure contextual continuity.",
+            "summary_memory": "Compiles a running compressed summary of past decisions to save context token space.",
+            "vector_memory": "Uses semantic embeddings (`embeddinggemma:latest`) to retrieve the top 2 most similar past itineraries.",
+            "episodic_memory": "Retrieves past problems (e.g. budget overruns) and their resolved negotiation outcomes.",
+            "semantic_memory": "Injects stable extracted facts (e.g. user home city, preferred airlines) into the planning context.",
+            "agent_specific_memory": "Isolates memory logs strictly to each agent (e.g. Flight Agent only retains flight search data).",
+            "shared_memory": "Allows agents to access a common cross-agent collaborative memory pool.",
+            "hybrid_memory": "Combines semantic user profiles and semantic vector searches of past itineraries simultaneously."
+        }
+        
+        desc = memory_descriptions.get(memory_type, "")
+        st.info(f"**Current Memory Mode: {memory_type.title()}** — {desc}")
+        
+        # Let's show a toggle/expander to inspect the Memory Store!
+        with st.expander("📂 Inspect Active Memory Store (memory_store.json)", expanded=False):
+            from agents.memory_manager import MemoryManager
+            mm = MemoryManager()
+            
+            col_mem1, col_mem2 = st.columns(2)
+            with col_mem1:
+                st.markdown("#### 💬 Conversations Logged")
+                if mm.store.get("conversations"):
+                    st.write(f"Total interactions recorded: `{len(mm.store['conversations'])}`")
+                    st.dataframe(
+                        [{
+                            "Timestamp": c["timestamp"],
+                            "Agent": c["agent_name"],
+                            "Query": c["query"][:60] + "...",
+                            "Response Snippet": c["output"][:100] + "..."
+                        } for c in mm.store["conversations"][-5:]],
+                        use_container_width=True
+                    )
+                else:
+                    st.caption("No conversations recorded yet.")
+                    
+            with col_mem2:
+                st.markdown("#### 🎯 Extracted Semantic Profile")
+                if mm.store.get("semantic_facts"):
+                    st.json(mm.store["semantic_facts"])
+                else:
+                    st.caption("No semantic facts extracted yet.")
+                    
+            col_mem3, col_mem4 = st.columns(2)
+            with col_mem3:
+                st.markdown("#### 📝 Running Summaries")
+                if mm.store.get("summaries"):
+                    st.json(mm.store["summaries"])
+                else:
+                    st.caption("No summaries generated yet.")
+                    
+            with col_mem4:
+                st.markdown("#### 🛠️ Solved Episodes (Tradeoffs)")
+                if mm.store.get("episodes"):
+                    st.dataframe(mm.store["episodes"], use_container_width=True)
+                else:
+                    st.caption("No episodes logged yet.")
+                    
+            if st.button("🗑️ Clear All Agent Memory"):
+                mm.store = mm.get_default_store()
+                mm.save_memory()
+                st.success("Memory store cleared!")
+                st.rerun()
+                
+        active_memory = memory_type
+
     # Run button
-    if st.button("Generate Travel Plan"):
+    btn_label = "Generate Travel Plan with Memory" if "Phase 1" in phase_selection else "Generate Travel Plan"
+    if st.button(btn_label):
         # Parameter validation
         if not origin or not destination:
             st.error("Origin and Destination cities cannot be empty!")
@@ -499,11 +576,26 @@ with tab1:
             )
             
             # Initialize Planner Agent with sidebar config
-            planner = PlannerAgent(memory_type=memory_type, sync_type=sync_type)
+            planner = PlannerAgent()
             planner.load_config()
+            planner.memory_type = active_memory
+            planner.sync_type = sync_type
             # Set temperature and active model on agents
             planner.temperature = temperature
             planner.set_model(selected_model)
+            
+            # Prepare container for real-time chat bubbles
+            st.markdown("### 💬 Agent Mesh Communication Log")
+            chat_container_placeholder = st.empty()
+            accumulated_chat_html = ""
+            
+            # Helper to refresh the chat window with current message plus history
+            def update_chat_ui(live_msg_html: str = ""):
+                # Wrap inside the custom chat-container styling
+                full_html = f'<div class="chat-container">{accumulated_chat_html}{live_msg_html}</div>'
+                chat_container_placeholder.markdown(full_html, unsafe_allow_html=True)
+            
+            update_chat_ui()
             
             # 1. FLIGHT SPECIALIST AGENT
             status_text.text("Flight Specialist Agent is researching...")
@@ -520,11 +612,19 @@ with tab1:
             )
             for chunk in planner.flight_agent.search_flights_stream(flight_search_req):
                 flight_summary += chunk
+                live_bubble = render_chat_message("Flight Specialist", "flight", "✈️", "flight", "flight", flight_summary, is_done=False)
+                update_chat_ui(live_bubble)
             
             # Clean and verify flight summary
             _, clean_flight = parse_thinking_and_output(flight_summary, is_done=True)
             if not clean_flight or len(clean_flight.strip()) < 30:
                 clean_flight = planner.flight_agent.search_flights(flight_search_req)
+                flight_summary = f"<think>\nGenerating clean database flight results...\n</think>\n{clean_flight}"
+            
+            # Commit flight specialist bubble to history
+            final_flight_bubble = render_chat_message("Flight Specialist", "flight", "✈️", "flight", "flight", flight_summary, is_done=True)
+            accumulated_chat_html += final_flight_bubble
+            update_chat_ui()
             
             # 2. HOTEL SPECIALIST AGENT
             status_text.text("Hotel Specialist Agent is finding lodging...")
@@ -540,11 +640,19 @@ with tab1:
             )
             for chunk in planner.hotel_agent.search_hotels_stream(hotel_search_req):
                 hotel_summary += chunk
+                live_bubble = render_chat_message("Hotel Specialist", "hotel", "🏨", "hotel", "hotel", hotel_summary, is_done=False)
+                update_chat_ui(live_bubble)
                 
             # Clean and verify hotel summary
             _, clean_hotel = parse_thinking_and_output(hotel_summary, is_done=True)
             if not clean_hotel or len(clean_hotel.strip()) < 30:
                 clean_hotel = planner.hotel_agent.search_hotels(hotel_search_req)
+                hotel_summary = f"<think>\nGenerating clean database hotel results...\n</think>\n{clean_hotel}"
+            
+            # Commit hotel specialist bubble to history
+            final_hotel_bubble = render_chat_message("Hotel Specialist", "hotel", "🏨", "hotel", "hotel", hotel_summary, is_done=True)
+            accumulated_chat_html += final_hotel_bubble
+            update_chat_ui()
                 
             # 3. BUDGET SPECIALIST AGENT
             status_text.text("Budget Specialist Agent is calculating expenses...")
@@ -561,6 +669,8 @@ with tab1:
                 user_budget=request.budget,
             ):
                 budget_summary += chunk
+                live_bubble = render_chat_message("Budget Specialist", "budget", "💰", "budget", "budget", budget_summary, is_done=False)
+                update_chat_ui(live_bubble)
                 
             # Clean and verify budget summary
             _, clean_budget = parse_thinking_and_output(budget_summary, is_done=True)
@@ -574,6 +684,12 @@ with tab1:
                     hotel_summary=clean_hotel,
                     user_budget=request.budget,
                 )
+                budget_summary = f"<think>\nCalculating final budget expenses...\n</think>\n{clean_budget}"
+                
+            # Commit budget specialist bubble to history
+            final_budget_bubble = render_chat_message("Budget Specialist", "budget", "💰", "budget", "budget", budget_summary, is_done=True)
+            accumulated_chat_html += final_budget_bubble
+            update_chat_ui()
                 
             # 4. NEGOTIATION SPECIALIST AGENT
             status_text.text("Negotiation Specialist Agent is aligning options...")
@@ -586,6 +702,8 @@ with tab1:
                 budget_summary=clean_budget,
             ):
                 negotiation_summary += chunk
+                live_bubble = render_chat_message("Negotiation Specialist", "negotiation", "🤝", "negotiation", "negotiation", negotiation_summary, is_done=False)
+                update_chat_ui(live_bubble)
             
             # Clean and verify negotiation summary
             _, clean_negotiation = parse_thinking_and_output(negotiation_summary, is_done=True)
@@ -595,6 +713,12 @@ with tab1:
                     hotel_summary=clean_hotel,
                     budget_summary=clean_budget,
                 )
+                negotiation_summary = f"<think>\nResolving conflict details and trade-offs...\n</think>\n{clean_negotiation}"
+            
+            # Commit negotiation specialist bubble to history
+            final_negotiation_bubble = render_chat_message("Negotiation Specialist", "negotiation", "🤝", "negotiation", "negotiation", negotiation_summary, is_done=True)
+            accumulated_chat_html += final_negotiation_bubble
+            update_chat_ui()
             
             # Compile final plan with clean agent summaries
             plan = {
@@ -624,7 +748,7 @@ with tab1:
                 tracker.log_params(
                     {
                         "model": selected_model,
-                        "memory_type": memory_type,
+                        "memory_type": active_memory,
                         "sync_type": sync_type,
                         "temperature": temperature,
                         "origin": request.origin,
@@ -633,11 +757,12 @@ with tab1:
                         "return_date": request.return_date,
                         "travelers": request.travelers,
                         "budget": request.budget,
+                        "build_phase": "Phase 1: Memory Systems" if "Phase 1" in phase_selection else "Phase 0: Baseline"
                     }
                 )
                 tracker.log_metrics(
                     {
-                        "phases": 0,
+                        "phases": 1 if "Phase 1" in phase_selection else 0,
                         "agent_calls": 4,
                         "completion_status": 1
                     }

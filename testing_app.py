@@ -590,7 +590,21 @@ with st.sidebar:
     
     st.markdown("---")
     st.markdown("### 🛠️ Agent settings")
-    memory_type = st.selectbox("Memory System", options=["no_memory", "conversation_memory", "summary_memory"], index=0)
+    memory_type = st.selectbox(
+        "Memory System",
+        options=[
+            "no_memory",
+            "conversation_memory",
+            "summary_memory",
+            "vector_memory",
+            "episodic_memory",
+            "semantic_memory",
+            "agent_specific_memory",
+            "shared_memory",
+            "hybrid_memory"
+        ],
+        index=0
+    )
     sync_type = st.selectbox("Sync Protocol", options=["direct_message", "shared_blackboard", "event_driven"], index=0)
     temperature = st.slider("Temperature", min_value=0.0, max_value=1.0, value=0.2, step=0.1)
 
