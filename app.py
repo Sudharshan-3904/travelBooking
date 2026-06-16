@@ -334,14 +334,8 @@ def is_port_open(port):
 # Helper function to start MLflow server in background
 def ensure_mlflow_server(port=5000):
     if not is_port_open(port):
-        # We start the server asynchronously and let it run
-        cmd = [
-            "mlflow", "server",
-            "--backend-store-uri", "sqlite:///mlflow.db",
-            "--default-artifact-root", "./mlruns",
-            "--host", "127.0.0.1",
-            "--port", str(port)
-        ]
+        # We start the server asynchronously and let it run using python -m mlflow
+        cmd = f'python -m mlflow server --backend-store-uri sqlite:///mlflow.db --default-artifact-root ./mlruns --host 127.0.0.1 --port {port} --x-frame-options NONE'
         try:
             subprocess.Popen(
                 cmd, 
@@ -349,9 +343,13 @@ def ensure_mlflow_server(port=5000):
                 stderr=subprocess.PIPE, 
                 shell=True
             )
-            time.sleep(2.5) # Give it time to bind the port
+            time.sleep(3.0) # Give it time to bind the port
         except Exception as e:
             st.error(f"Failed to start MLflow server: {e}")
+
+# Run MLflow server at startup
+ensure_mlflow_server(port=5000)
+
 
 # Helper to fetch active Ollama models
 def get_ollama_models():
