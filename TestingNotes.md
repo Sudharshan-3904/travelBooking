@@ -19,3 +19,7 @@
 - Budget Pass Rate: 60%
 
 ## Qualitative Notes
+
+- Good performance for single stop destinations when budget has a good buffer.
+- On no budget buffer, the system switches to alternatives without issue.
+- Below budget the system does not inform about the insufficient budget or the inability to fulfill the request.
