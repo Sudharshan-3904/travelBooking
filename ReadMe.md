@@ -14,6 +14,8 @@ The project uses a travel booking environment as a controlled experimental domai
 
 The platform is intended for experimentation, benchmarking, academic research, and portfolio development rather than production deployment.
 
+Testing Dataset: ["Travel Planning Benchmark dataset"](https://huggingface.co/datasets/osunlp/TravelPlanner)
+
 ---
 
 # Research Objectives
