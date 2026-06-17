@@ -292,28 +292,7 @@ Store:
 
 ---
 
-# Stage 1.4 Semantic Memory
-
-## Goal
-
-Create long-term knowledge retention.
-
-### Characteristics
-
-Store:
-
-- User preferences
-- Stable travel patterns
-- Behavioral profiles
-
-### Evaluation
-
-- Preference accuracy
-- Recommendation quality
-
----
-
-# Stage 1.5 Agent-Specific Memory
+# Stage 1.4 Agent-Specific Memory
 
 ## Goal
 
@@ -341,7 +320,7 @@ Hotel Agent:
 
 ---
 
-# Stage 1.6 Shared Memory
+# Stage 1.5 Shared Memory
 
 ## Goal
 
@@ -358,7 +337,7 @@ All agents access a common memory repository.
 
 ---
 
-# Stage 1.7 Hybrid Memory
+# Stage 1.6 Hybrid Memory
 
 ## Goal
 
