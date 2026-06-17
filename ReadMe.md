@@ -292,50 +292,7 @@ Store:
 
 ---
 
-# Stage 1.4 Vector Memory
-
-## Goal
-
-Enable semantic retrieval.
-
-### Characteristics
-
-Store:
-
-- Embedded conversations
-- Historical itineraries
-- Previous travel plans
-
-### Evaluation
-
-- Retrieval quality
-- Personalization score
-- Hallucination reduction
-
----
-
-# Stage 1.5 Episodic Memory
-
-## Goal
-
-Allow agents to learn from past experiences.
-
-### Characteristics
-
-Store:
-
-- Problems encountered
-- Solutions selected
-- Outcomes achieved
-
-### Evaluation
-
-- Repeat-problem resolution rate
-- Learning efficiency
-
----
-
-# Stage 1.6 Semantic Memory
+# Stage 1.4 Semantic Memory
 
 ## Goal
 
@@ -356,7 +313,7 @@ Store:
 
 ---
 
-# Stage 1.7 Agent-Specific Memory
+# Stage 1.5 Agent-Specific Memory
 
 ## Goal
 
@@ -384,7 +341,7 @@ Hotel Agent:
 
 ---
 
-# Stage 1.8 Shared Memory
+# Stage 1.6 Shared Memory
 
 ## Goal
 
@@ -401,7 +358,7 @@ All agents access a common memory repository.
 
 ---
 
-# Stage 1.9 Hybrid Memory
+# Stage 1.7 Hybrid Memory
 
 ## Goal
 
