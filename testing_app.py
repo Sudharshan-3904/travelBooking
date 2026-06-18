@@ -578,11 +578,13 @@ with st.sidebar:
     
     st.markdown("### 🧪 Benchmark Configuration")
     # Number of random test cases (n)
+    max_cases = max(1, len(filtered_indices))
+    default_cases = max(1, int(max_cases * 0.1))
     n_cases = st.number_input(
         "Number of Random Cases (n)",
         min_value=1,
-        max_value=min(100, len(filtered_indices)),
-        value=5,
+        max_value=max_cases,
+        value=default_cases,
         step=1
     )
     

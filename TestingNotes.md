@@ -4,7 +4,7 @@
 
 | Criteria          | Value          |
 | ----------------- | -------------- |
-| Model             | Qwen2.5:1.5B   |
+| Model             | llama3.2:3b    |
 | Difficulty Levels | All            |
 | # Cases           | 100            |
 | Memory System     | No Memory      |
@@ -15,8 +15,11 @@
 
 ## Quantitative Scores
 
-- Avg Score: 92.3%
-- Budget Pass Rate: 60%
+- Avg Score: 77.6%
+- Budget Pass Rate: 65%
+- Destination Pass Rate: 77%
+- Duration Pass Rate: 97%
+- Constraint Pass Rate: 66%
 
 ## Qualitative Notes
 
