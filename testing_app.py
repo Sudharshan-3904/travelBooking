@@ -725,6 +725,7 @@ with tab1:
                 st.error(f"Error testing index {row_idx}: {e}")
                 
             progress_bar.progress(int(((idx + 1) / n_cases) * 100))
+            print(f"-----------------------LOG------------------------{len(sampled_indices)}-({row_idx}) / {n_cases} completed----------------------")
             
         status_text.markdown("✅ **Benchmark run completed!** saving and compiling results...")
         

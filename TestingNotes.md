@@ -7,7 +7,6 @@
 | Model             | llama3.2:latest |
 | Difficulty Levels | All             |
 | No. of Test Cases | 1000            |
-| Memory System     | No Memory       |
 | Sync Protocol     | Direct Message  |
 | Temperature       | 0.2             |
 
@@ -31,7 +30,7 @@
 
 ## Memory system notes - Phase 1
 
-### Quantitative Scores
+### Quantitative Scores - Conversational Memory
 
 | Metric                | Score |
 | --------------------- | ----- |
