@@ -34,6 +34,48 @@
 
 | Metric                | Score |
 | --------------------- | ----- |
+| Average Score         | 81%   |
+| Budget Pass Rate      | 78.4% |
+| Destination Pass Rate | 66.8% |
+| Duration Pass Rate    | 96.8% |
+| Constraint Pass Rate  | 71.7% |
+
+## Qualitative Notes
+
+-
+
+### Quantitative Scores - Summary Memory
+
+| Metric                | Score |
+| --------------------- | ----- |
+| Average Score         | 82.2% |
+| Budget Pass Rate      | 80.1% |
+| Destination Pass Rate | 69.4% |
+| Duration Pass Rate    | 97.3% |
+| Constraint Pass Rate  | 70.3% |
+
+## Qualitative Notes
+
+-
+
+### Quantitative Scores - Agent Specific Memory
+
+| Metric                | Score |
+| --------------------- | ----- |
+| Average Score         | 80.9% |
+| Budget Pass Rate      | 76.9% |
+| Destination Pass Rate | 69.1% |
+| Duration Pass Rate    | 96.4% |
+| Constraint Pass Rate  | 67.0% |
+
+## Qualitative Notes
+
+-
+
+### Quantitative Scores
+
+| Metric                | Score |
+| --------------------- | ----- |
 | Average Score         | --%   |
 | Budget Pass Rate      | --%   |
 | Destination Pass Rate | --%   |
