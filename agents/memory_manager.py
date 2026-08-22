@@ -34,6 +34,13 @@ class MemoryManager:
                 self.store = self.get_default_store()
         else:
             self.store = self.get_default_store()
+            
+        # Legacy migrations/safeguards
+        self.store.setdefault("conversations", [])
+        self.store.setdefault("summaries", {})
+        self.store.setdefault("semantic_facts", {})
+        self.store.setdefault("episodes", [])
+        self.store.setdefault("agent_semantic_facts", {})
 
     def save_memory(self):
         try:
@@ -47,7 +54,8 @@ class MemoryManager:
             "conversations": [],      # List of {agent_name, query, input, output, timestamp, embedding}
             "summaries": {},          # Dict of agent_name -> summary string
             "semantic_facts": {},      # Dict of fact_key -> fact_value (e.g., preferred_airlines, budget_tier)
-            "episodes": []            # List of {problem, solution, outcome}
+            "episodes": [],            # List of {problem, solution, outcome}
+            "agent_semantic_facts": {}  # Dict of agent_name -> Dict of fact_key -> fact_value
         }
 
     def get_embedding(self, text: str) -> Optional[List[float]]:
@@ -84,7 +92,10 @@ class MemoryManager:
         # 2. Extract semantic facts from the output
         self.extract_semantic_facts(query, output_text)
         
-        # 3. Extract episodes (especially for negotiation/budget conflicts)
+        # 3. Extract agent-specific localized facts
+        self.extract_agent_specific_facts(agent_name, query, output_text)
+        
+        # 4. Extract episodes (especially for negotiation/budget conflicts)
         self.extract_episodes(agent_name, query, output_text)
         
         self.save_memory()
@@ -110,8 +121,9 @@ class MemoryManager:
                 self.store["summaries"][agent_name] = new_addition
         
         # Cap the summary length to avoid context explosion
-        if len(self.store["summaries"][agent_name]) > 1000:
-            self.store["summaries"][agent_name] = "..." + self.store["summaries"][agent_name][-800:]
+        if agent_name in self.store["summaries"]:
+            if len(self.store["summaries"][agent_name]) > 1000:
+                self.store["summaries"][agent_name] = "..." + self.store["summaries"][agent_name][-800:]
 
     def extract_semantic_facts(self, query: str, output_text: str):
         # Simple regex heuristics to extract facts
@@ -145,6 +157,60 @@ class MemoryManager:
         if home_match:
             self.store["semantic_facts"]["user_home_city"] = home_match.group(1).strip().title()
 
+    def extract_agent_specific_facts(self, agent_name: str, query: str, output_text: str):
+        if "agent_semantic_facts" not in self.store:
+            self.store["agent_semantic_facts"] = {}
+        if agent_name not in self.store["agent_semantic_facts"]:
+            self.store["agent_semantic_facts"][agent_name] = {}
+            
+        agent_facts = self.store["agent_semantic_facts"][agent_name]
+        
+        # Flight Agent specific extraction
+        if agent_name == "FlightAgent":
+            airline_match = re.findall(r'\b(Delta|United|Alaska|American Airlines|Southwest|JetBlue|Spirit)\b', output_text, re.IGNORECASE)
+            if airline_match:
+                agent_facts["preferred_airlines"] = list(set([a.title() for a in airline_match]))[:3]
+            
+            # Flight patterns (e.g. morning, evening, nonstop)
+            patterns = []
+            if "morning" in output_text.lower() or "morning" in query.lower():
+                patterns.append("Morning departures")
+            if "evening" in output_text.lower() or "evening" in query.lower():
+                patterns.append("Evening departures")
+            if "nonstop" in output_text.lower() or "direct" in output_text.lower() or "non-stop" in output_text.lower():
+                patterns.append("Nonstop/Direct flights preferred")
+            if patterns:
+                agent_facts["flight_patterns"] = patterns
+
+        # Hotel Agent specific extraction
+        elif agent_name == "HotelAgent":
+            prefs = []
+            if "breakfast" in output_text.lower() or "breakfast" in query.lower():
+                prefs.append("Breakfast included")
+            if "city center" in output_text.lower() or "downtown" in output_text.lower():
+                prefs.append("Central location / City center")
+            if "mid-range" in output_text.lower() or "mid-range" in query.lower():
+                prefs.append("Mid-range hotel preference")
+            if "luxury" in output_text.lower() or "premium" in output_text.lower():
+                prefs.append("Premium/Luxury hotel preference")
+            if prefs:
+                agent_facts["accommodation_preferences"] = prefs
+                
+        # Budget Agent specific extraction
+        elif agent_name == "BudgetAgent":
+            budget_match = re.search(r'\$\s*([0-9,]+)', query)
+            if budget_match:
+                try:
+                    budget_val = int(budget_match.group(1).replace(",", ""))
+                    if budget_val < 1000:
+                        agent_facts["budget_tier"] = "Economy/Budget (<$1000)"
+                    elif budget_val <= 2500:
+                        agent_facts["budget_tier"] = "Mid-Range ($1000-$2500)"
+                    else:
+                        agent_facts["budget_tier"] = "Premium/Luxury (>$2500)"
+                except Exception:
+                    pass
+
     def extract_episodes(self, agent_name: str, query: str, output_text: str):
         # Focus on budget conflicts or tradeoffs
         if "exceed" in output_text.lower() or "over budget" in output_text.lower() or "alternative" in output_text.lower() or "trade-off" in output_text.lower():
@@ -171,26 +237,25 @@ class MemoryManager:
                 # Cap episodes
                 self.store["episodes"] = self.store["episodes"][-10:]
 
-    def retrieve_context(self, agent_name: str, query: str, memory_type: str) -> str:
+    def retrieve_context(self, agent_name: str, query: str, memory_type: str, window_size: int = 5) -> str:
         if memory_type == "no_memory":
             return ""
 
         context_blocks = []
 
         # 1. Filtered conversations
-        convs = self.store["conversations"]
+        convs = self.store.setdefault("conversations", [])
         
-        # Determine agent filter
-        is_shared = (memory_type == "shared_memory" or memory_type == "hybrid_memory")
+        # Determine agent filter: conversation_memory and shared_memory are shared pools
+        is_shared = (memory_type in ["conversation_memory", "shared_memory"])
         if is_shared:
             agent_convs = convs
         else:
             agent_convs = [c for c in convs if c["agent_name"] == agent_name]
 
         # Handle different memory types
-        if memory_type in ["conversation_memory", "agent_specific_memory", "shared_memory"]:
-            # Get last 3 conversations
-            recent = agent_convs[-3:]
+        if memory_type == "conversation_memory":
+            recent = agent_convs[-window_size:]
             if recent:
                 context_blocks.append("=== Recent Conversation History ===")
                 for r in recent:
@@ -202,14 +267,75 @@ class MemoryManager:
                         f"---"
                     )
 
+        elif memory_type == "agent_specific_memory":
+            # 1. Local agent conversations
+            recent = agent_convs[-window_size:]
+            if recent:
+                context_blocks.append("=== Agent Local Conversation History ===")
+                for r in recent:
+                    context_blocks.append(
+                        f"Timestamp: {r['timestamp']}\n"
+                        f"Query: {r['query']}\n"
+                        f"Response: {r['output']}\n"
+                        f"---"
+                    )
+            # 2. Localized agent facts
+            agent_facts = self.store.setdefault("agent_semantic_facts", {}).setdefault(agent_name, {})
+            if agent_facts:
+                context_blocks.append(f"=== Isolated {agent_name} Preferences ===")
+                for k, v in agent_facts.items():
+                    val_str = ", ".join(v) if isinstance(v, list) else str(v)
+                    context_blocks.append(f"- {k.replace('_', ' ').title()}: {val_str}")
+
         elif memory_type == "summary_memory":
-            summary = self.store["summaries"].get(agent_name, "")
+            summary = self.store.setdefault("summaries", {}).get(agent_name, "")
             if summary:
                 context_blocks.append("=== Running History Summary ===")
                 context_blocks.append(summary)
+            # Key user preferences from semantic facts
+            facts = self.store.setdefault("semantic_facts", {})
+            if facts:
+                context_blocks.append("=== Key User Preferences ===")
+                for k, v in facts.items():
+                    context_blocks.append(f"- {k.replace('_', ' ').title()}: {v}")
+
+        elif memory_type == "shared_memory":
+            context_blocks.append("=== Global Shared Memory Pool ===")
+            
+            # 1. Recent global conversations
+            recent = agent_convs[-window_size:]
+            if recent:
+                context_blocks.append("--- Recent Cross-Agent Activity ---")
+                for r in recent:
+                    context_blocks.append(f"{r['agent_name']}: {r['output'][:200]}...")
+            
+            # 2. All agent summaries
+            summaries = self.store.setdefault("summaries", {})
+            if summaries:
+                context_blocks.append("--- Collaborative Summaries ---")
+                for ag, summ in summaries.items():
+                    if summ:
+                        context_blocks.append(f"[{ag}]: {summ}")
+            
+            # 3. Global semantic facts
+            facts = self.store.setdefault("semantic_facts", {})
+            if facts:
+                context_blocks.append("--- Global Semantic Facts ---")
+                for k, v in facts.items():
+                    context_blocks.append(f"- {k.replace('_', ' ').title()}: {v}")
+
+            # 4. Global negotiation episodes
+            episodes = self.store.setdefault("episodes", [])
+            if episodes:
+                context_blocks.append("--- Collaborative Negotiation Episodes ---")
+                for ep in episodes[-2:]:
+                    context_blocks.append(
+                        f"- Problem: {ep['problem']}\n"
+                        f"  Solution: {ep['solution']}\n"
+                        f"  Outcome: {ep['outcome']}"
+                    )
 
         elif memory_type == "vector_memory":
-            # Semantic search
             query_emb = self.get_embedding(query)
             if query_emb and agent_convs:
                 scored_convs = []
@@ -217,7 +343,6 @@ class MemoryManager:
                     if c.get("embedding"):
                         score = cosine_similarity(query_emb, c["embedding"])
                         scored_convs.append((score, c))
-                # Sort by score descending
                 scored_convs.sort(key=lambda x: x[0], reverse=True)
                 top_2 = scored_convs[:2]
                 if top_2:
@@ -230,7 +355,6 @@ class MemoryManager:
                             f"---"
                         )
             else:
-                # Fallback to last 2 conversations if no embeddings available
                 recent = agent_convs[-2:]
                 if recent:
                     context_blocks.append("=== Past Cases (Keyword Fallback) ===")
@@ -242,7 +366,7 @@ class MemoryManager:
                         )
 
         elif memory_type == "episodic_memory":
-            episodes = self.store["episodes"]
+            episodes = self.store.setdefault("episodes", [])
             if episodes:
                 context_blocks.append("=== Past Resolved Issues/Episodes ===")
                 for ep in episodes[-3:]:
@@ -253,7 +377,7 @@ class MemoryManager:
                     )
 
         elif memory_type == "semantic_memory":
-            facts = self.store["semantic_facts"]
+            facts = self.store.setdefault("semantic_facts", {})
             if facts:
                 context_blocks.append("=== Long-term User Profiles & Facts ===")
                 for k, v in facts.items():
@@ -261,25 +385,49 @@ class MemoryManager:
                     context_blocks.append(f"- {key_title}: {v}")
 
         elif memory_type == "hybrid_memory":
-            # Combine conversation memory, semantic memory, and vector memory
-            # Semantic facts
-            facts = self.store["semantic_facts"]
+            # Agent Memory + Shared Memory + Episodic Memory + Semantic Memory
+            
+            # 1. Agent Memory: Local agent conversations
+            local_convs = [c for c in convs if c["agent_name"] == agent_name]
+            recent = local_convs[-3:]
+            if recent:
+                context_blocks.append("=== Agent Local Memory (Recent History) ===")
+                for r in recent:
+                    context_blocks.append(f"Query: {r['query']}\nResponse: {r['output']}\n---")
+
+            # 2. Shared Memory: Collaborative summaries of other agents
+            summaries = self.store.setdefault("summaries", {})
+            other_summaries = {ag: summ for ag, summ in summaries.items() if ag != agent_name and summ}
+            if other_summaries:
+                context_blocks.append("=== Shared Memory (Other Agents' Summaries) ===")
+                for ag, summ in other_summaries.items():
+                    context_blocks.append(f"[{ag}]: {summ}")
+            
+            # 3. Semantic Memory: Global user profile/facts
+            facts = self.store.setdefault("semantic_facts", {})
             if facts:
-                context_blocks.append("=== User Profile ===")
+                context_blocks.append("=== Semantic Memory (User Profile) ===")
                 for k, v in facts.items():
                     context_blocks.append(f"- {k.replace('_', ' ').title()}: {v}")
+
+            # 4. Episodic Memory: Resolved negotiation episodes
+            episodes = self.store.setdefault("episodes", [])
+            if episodes:
+                context_blocks.append("=== Episodic Memory (Resolved Issues) ===")
+                for ep in episodes[-2:]:
+                    context_blocks.append(f"- Problem: {ep['problem']}\n  Solution: {ep['solution']}")
             
-            # Vector memory top 1
+            # 5. Vector memory top 1 (global semantic search)
             query_emb = self.get_embedding(query)
-            if query_emb and agent_convs:
+            if query_emb and convs:
                 scored = []
-                for c in agent_convs:
+                for c in convs:
                     if c.get("embedding"):
                         score = cosine_similarity(query_emb, c["embedding"])
                         scored.append((score, c))
                 scored.sort(key=lambda x: x[0], reverse=True)
                 if scored:
-                    context_blocks.append("\n=== Most Relevant Past Case ===")
+                    context_blocks.append("\n=== Semantic Vector Case Retrieval ===")
                     score, r = scored[0]
                     context_blocks.append(
                         f"Past Query: {r['query']}\n"

@@ -237,6 +237,7 @@ class BaseAgent:
         self.memory_type = memory_type
         self.sync_type = sync_type
         self.temperature = temperature
+        self.conversation_window = 5
         self.memory: List[str] = []
         self.llm_manager = OllamaManager() if ollama else None
         from agents.memory_manager import MemoryManager
@@ -252,6 +253,7 @@ class BaseAgent:
                 self.memory_type = config.get("memory_type", self.memory_type)
                 self.sync_type = config.get("sync_type", self.sync_type)
                 self.temperature = config.get("temperature", self.temperature)
+                self.conversation_window = config.get("conversation_window", self.conversation_window)
                 if "model_name" in config:
                     self.set_model(config["model_name"])
             except Exception as e:
@@ -278,7 +280,8 @@ class BaseAgent:
             memory_context = self.memory_manager.retrieve_context(
                 agent_name=self.name,
                 query=user_prompt,
-                memory_type=self.memory_type
+                memory_type=self.memory_type,
+                window_size=getattr(self, "conversation_window", 5)
             )
 
         if memory_context:
@@ -337,7 +340,8 @@ class BaseAgent:
             memory_context = self.memory_manager.retrieve_context(
                 agent_name=self.name,
                 query=user_prompt,
-                memory_type=self.memory_type
+                memory_type=self.memory_type,
+                window_size=getattr(self, "conversation_window", 5)
             )
 
         if memory_context:

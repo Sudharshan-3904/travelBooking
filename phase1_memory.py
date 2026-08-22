@@ -28,6 +28,7 @@ def parse_arguments() -> argparse.Namespace:
         ],
         help="Memory system architecture to activate."
     )
+    parser.add_argument("--window", type=int, default=5, help="Conversation window size for memory configurations.")
     return parser.parse_args()
 
 
@@ -43,10 +44,11 @@ def main() -> None:
         preferences=args.preferences,
     )
 
-    print(f"[*] Running Phase 1 (Memory Systems) with Memory: {args.memory}")
+    print(f"[*] Running Phase 1 (Memory Systems) with Memory: {args.memory} (window={args.window})")
     planner = PlannerAgent()
     planner.load_config()
     planner.memory_type = args.memory
+    planner.conversation_window = args.window
     
     plan = planner.plan_trip(request)
     itinerary = planner.build_itinerary(request, plan)
@@ -65,6 +67,7 @@ def main() -> None:
                 "budget": request.budget,
                 "preferences": request.preferences,
                 "memory_system": args.memory,
+                "conversation_window": args.window,
                 "build_phase": "Phase 1: Memory Systems"
             }
         )

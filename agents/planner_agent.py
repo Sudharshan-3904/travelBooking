@@ -24,17 +24,18 @@ class PlannerAgent(BaseAgent):
         self.hotel_agent = HotelAgent(memory_type=memory_type, sync_type=sync_type)
         self.budget_agent = BudgetAgent(memory_type=memory_type, sync_type=sync_type)
         self.negotiation_agent = NegotiationAgent(memory_type=memory_type, sync_type=sync_type)
+        self.conversation_window = self.conversation_window
 
     def load_config(self, config_filename: str = "config.json") -> None:
         super().load_config(config_filename)
         if hasattr(self, 'flight_agent'):
-            self.flight_agent.load_config(config_filename)
+            self.flight_agent.conversation_window = self.conversation_window
         if hasattr(self, 'hotel_agent'):
-            self.hotel_agent.load_config(config_filename)
+            self.hotel_agent.conversation_window = self.conversation_window
         if hasattr(self, 'budget_agent'):
-            self.budget_agent.load_config(config_filename)
+            self.budget_agent.conversation_window = self.conversation_window
         if hasattr(self, 'negotiation_agent'):
-            self.negotiation_agent.load_config(config_filename)
+            self.negotiation_agent.conversation_window = self.conversation_window
 
     def set_model(self, model_name: str) -> None:
         super().set_model(model_name)
@@ -62,6 +63,22 @@ class PlannerAgent(BaseAgent):
             self.budget_agent.temperature = value
         if hasattr(self, 'negotiation_agent'):
             self.negotiation_agent.temperature = value
+
+    @property
+    def conversation_window(self) -> int:
+        return self._conversation_window
+
+    @conversation_window.setter
+    def conversation_window(self, value: int) -> None:
+        self._conversation_window = value
+        if hasattr(self, 'flight_agent'):
+            self.flight_agent.conversation_window = value
+        if hasattr(self, 'hotel_agent'):
+            self.hotel_agent.conversation_window = value
+        if hasattr(self, 'budget_agent'):
+            self.budget_agent.conversation_window = value
+        if hasattr(self, 'negotiation_agent'):
+            self.negotiation_agent.conversation_window = value
 
     @property
     def memory_type(self) -> str:
